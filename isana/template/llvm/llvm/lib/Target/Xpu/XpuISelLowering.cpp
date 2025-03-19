@@ -56,6 +56,7 @@ using namespace llvm;
   setOperationAction(ISD::VAEND,     MVT::Other, Expand);
 
   setOperationAction(ISD::GlobalAddress, XLenVT, Custom);
+  setOperationAction(ISD::ConstantPool, XLenVT, Custom);
 
   // Function alignments
   setMinFunctionAlignment(Align(4));
@@ -151,7 +152,7 @@ SDValue
     MVT RegTy = MVT::getIntegerVT(XLenInBytes * 8);
     const TargetRegisterClass *RC = getRegClassFor(RegTy);
     MachineRegisterInfo &RegInfo = MF.getRegInfo();
-    {{ xpu }}MachineFunctionInfo *MFnInfo = MF.getInfo<{{ xpu }}MachineFunctionInfo>();
+    {{ Xpu }}MachineFunctionInfo *MFnInfo = MF.getInfo<{{ Xpu }}MachineFunctionInfo>();
 
     int VarArgsSaveSize = XLenInBytes * (ArgRegs.size() - Idx);
     int FI;
@@ -389,6 +390,8 @@ SDValue
     report_fatal_error("unimplemented operand");
   case ISD::GlobalAddress:
     return lowerGlobalAddress(Op, DAG);
+  case ISD::ConstantPool:
+    return lowerConstantPool(Op, DAG);
   case ISD::SELECT:
     return lowerSELECT(Op, DAG);
   case ISD::VASTART:
@@ -428,6 +431,16 @@ SDValue
 ) const {
   SDLoc DL(N);
   EVT Ty = getPointerTy(DAG.getDataLayout());
+  MVT XLenVT = Subtarget.getXLenVT();
+
+  if (isPositionIndependent()) {
+    SDValue Addr = getTargetNode(N, DL, Ty, DAG, 0);
+    if (IsLocal)
+      // return DAG.getNode(CustomXPUISD::LLA, DL, Ty, Addr);
+      return SDValue(DAG.getMachineNode({{ Xpu }}::ADDI, DL, Ty,
+                                        DAG.getRegister({{ Xpu }}::X0, XLenVT), Addr), 0);
+  }
+
   // switch (getTargetMachine().getCodeModel()) {
   //   default:
   //     report_fatal_error("Unsupported code model for lowering");
@@ -453,24 +466,25 @@ SDValue
   int64_t Offset = N->getOffset();
   SDLoc DL(Op);
   EVT Ty = Op.getValueType();
-  MVT VT = Op.getSimpleValueType();
   MVT XLenVT = Subtarget.getXLenVT();
-
-  if (!isPositionIndependent()) {
-    const GlobalValue *GV = N->getGlobal();
-    SDValue Addr = getAddr(N, DAG, GV->isDSOLocal(), GV->hasExternalWeakLinkage());
-    if (Offset) {
-      return DAG.getNode(ISD::ADD, DL, Ty, Addr,
-                         DAG.getConstant(Offset, DL, XLenVT));
-    } else {
-      return Addr;
-    }
+  // assert(N->getOffset() == 0 && "unexpected offset in global node");
+  const GlobalValue *GV = N->getGlobal();
+  SDValue Addr = getAddr(N, DAG, GV->isDSOLocal(), GV->hasExternalWeakLinkage());
+  if (Offset) {
+    return DAG.getNode(ISD::ADD, DL, Ty, Addr,
+                        DAG.getConstant(Offset, DL, XLenVT));
+  } else {
+    return Addr;
   }
+}
 
-  SDValue Addr = getTargetNode(N, DL, Ty, DAG, 0);
-  // return SDValue(DAG.getMachineNode({{ Xpu }}::PseudoLA, DL, Ty, Addr), 0);
-  return SDValue(DAG.getMachineNode({{ Xpu }}::ADDI, DL, Ty,
-                                    DAG.getRegister({{ Xpu }}::X0, VT), Addr), 0);
+SDValue
+{{ Xpu }}TargetLowering::lowerConstantPool(
+  SDValue Op,
+  SelectionDAG &DAG
+) const {
+  ConstantPoolSDNode *N = cast<ConstantPoolSDNode>(Op);
+  return getAddr(N, DAG);
 }
 
 SDValue
