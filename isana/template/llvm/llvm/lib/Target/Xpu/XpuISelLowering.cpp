@@ -40,7 +40,11 @@ using namespace llvm;
   setOperationAction(ISD::BSWAP, XLenVT, Expand);  // TODO: Zbb | Zbkb => Legal
   setOperationAction({ISD::CTTZ, ISD::CTLZ, ISD::CTPOP}, XLenVT, Expand);
   setOperationAction({ISD::ROTL, ISD::ROTR}, XLenVT, Expand);  // TODO: Zbb | Zbkb => Legal
-                                                               //
+  // Handle i64 shl
+  setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
+  setOperationAction(ISD::SRA_PARTS, MVT::i32, Expand);
+  setOperationAction(ISD::SRL_PARTS, MVT::i32, Expand);
+
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1, Expand);
   setOperationAction(ISD::SIGN_EXTEND_INREG, {MVT::i8, MVT::i16}, Expand);  // TODO: zbb => delete this
 
