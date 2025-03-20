@@ -194,6 +194,18 @@ SDValue
   return Chain;
 }
 
+bool
+{{ Xpu }}TargetLowering::CanLowerReturn(
+  CallingConv::ID CallConv,
+  MachineFunction &MF, bool IsVarArg,
+  const SmallVectorImpl<ISD::OutputArg> &Outs,
+  LLVMContext &Context
+) const {
+  SmallVector<CCValAssign, 16> RVLocs;
+  CCState RetCCInfo(CallConv, IsVarArg, MF, RVLocs, Context);
+  return RetCCInfo.CheckReturn(Outs, RetCC_{{ Xpu }}32);
+}
+
 SDValue
 {{ Xpu }}TargetLowering::LowerReturn(
   SDValue Chain,
@@ -301,6 +313,8 @@ SDValue
     assert(VA.isMemLoc() && "Argument not register or memory");
     /* MemOpChains.push_back(passArgOnStack(...)); */ {
       if (!IsTailCall) {
+        if (!StackPtr.getNode())
+          StackPtr = DAG.getCopyFromReg(Chain, DL, {{ Xpu }}::X2, PtrVT);
         SDValue PtrOff =
             DAG.getNode(ISD::ADD, DL, getPointerTy(DAG.getDataLayout()), StackPtr,
                         DAG.getIntPtrConstant(VA.getLocMemOffset(), DL));
