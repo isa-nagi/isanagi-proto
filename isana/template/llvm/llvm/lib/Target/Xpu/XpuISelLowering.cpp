@@ -551,6 +551,27 @@ const char *
   return nullptr;
 }
 
+std::pair<unsigned, const TargetRegisterClass *>
+{{ Xpu }}TargetLowering::getRegForInlineAsmConstraint(
+  const TargetRegisterInfo *TRI,
+  StringRef Constraint,
+  MVT VT
+) const {
+  if (Constraint.size() == 1) {
+    switch (Constraint[0]) {
+    case 'r':
+      return std::make_pair(0U, &{{ Xpu }}::GPRRegClass);
+    default:
+      break;
+    }
+  }
+
+  std::pair<Register, const TargetRegisterClass *> Res =
+      TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
+
+  return Res;
+}
+
 static unsigned
 getBranchOpcodeForIntCondCode (ISD::CondCode CC) {
   switch (CC) {
