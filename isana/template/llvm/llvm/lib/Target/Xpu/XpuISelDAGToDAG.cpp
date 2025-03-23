@@ -46,21 +46,6 @@ bool {{ Xpu }}DAGToDAGISel::runOnMachineFunction(MachineFunction &MF) {
   return Ret;
 }
 
-bool {{ Xpu }}DAGToDAGISel::SelectAddrFrameIndex(
-  SDValue Addr,
-  SDValue &Base
-) {
-  auto VT = MVT::i32;
-  SDLoc DL(Addr);
-
-  if (auto *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
-    Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), VT);
-    return true;
-  }
-
-  return false;
-}
-
 bool {{ Xpu }}DAGToDAGISel::SelectAddrFrameIndexRegImm(
   SDValue Addr,
   SDValue &Base,
@@ -70,7 +55,8 @@ bool {{ Xpu }}DAGToDAGISel::SelectAddrFrameIndexRegImm(
   SDLoc DL(Addr);
 
   // (frameindex) -> (frameindex, 0)
-  if (SelectAddrFrameIndex(Addr, Base)) {
+  if (auto *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
+    Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), VT);
     Offset = CurDAG->getTargetConstant(0, DL, VT);
     return true;
   }
@@ -88,51 +74,6 @@ bool {{ Xpu }}DAGToDAGISel::SelectAddrFrameIndexRegImm(
   return false;
 }
 
-bool {{ Xpu }}DAGToDAGISel::SelectAddrGlobal(
-  SDValue Addr,
-  SDValue &Base
-) {
-  SDLoc DL(Addr);
-
-  if (auto *GA = dyn_cast<GlobalAddressSDNode>(Addr)) {
-    Base = CurDAG->getTargetGlobalAddress(GA->getGlobal(), DL,
-                                          /*getPointerTy(CurDAG->getDataLayout())*/
-                                          Addr.getValueType());
-    return true;
-  }
-
-  return false;
-}
-
-bool {{ Xpu }}DAGToDAGISel::SelectAddrGlobalRegImm(
-  SDValue Addr,
-  SDValue &Base,
-  SDValue &Offset
-) {
-  auto VT = MVT::i32;
-  SDLoc DL(Addr);
-
-  // (globaladdr) -> (globaladdr, 0)
-  if (SelectAddrGlobal(Addr, Base)) {
-    Offset = CurDAG->getTargetConstant(0, DL, VT);
-    return true;
-  }
-
-  if (CurDAG->isBaseWithConstantOffset(Addr)) {
-    // (add (globaladdr), imm) -> (globaladdr, imm)
-    if (auto *GA = dyn_cast<GlobalAddressSDNode>(Addr.getOperand(0))) {
-      int64_t CVal = cast<ConstantSDNode>(Addr.getOperand(1))->getSExtValue();
-      Base = CurDAG->getTargetGlobalAddress(GA->getGlobal(), DL,
-                                          /*getPointerTy(CurDAG->getDataLayout())*/
-                                          Addr.getValueType());
-      Offset = CurDAG->getTargetConstant(0, DL, VT);
-      return true;
-    }
-  }
-
-  return false;
-}
-
 bool {{ Xpu }}DAGToDAGISel::SelectAddrRegImm(
   SDValue Addr,
   SDValue &Base,
@@ -142,12 +83,8 @@ bool {{ Xpu }}DAGToDAGISel::SelectAddrRegImm(
   SDLoc DL(Addr);
 
   if (SelectAddrFrameIndexRegImm(Addr, Base, Offset)) {
-    return true;
+    return false;
   }
-
-  // if (SelectAddrGlobalRegImm(Addr, Base, Offset)) {
-  //   return true;
-  // }
 
   if (CurDAG->isBaseWithConstantOffset(Addr)) {
     // (add addr, imm) -> (addr, imm)
@@ -170,13 +107,13 @@ bool {{ Xpu }}DAGToDAGISel::SelectAddrRegImm(
   if (auto *C = dyn_cast<ConstantSDNode>(Addr)) {
     int64_t CVal = C->getZExtValue();
     if (isInt<12>(CVal)) {
-      Base = CurDAG->getRegister(CustomXPU::X0, VT);
+      Base = CurDAG->getRegister({{ Xpu }}::X0, VT);
       // Offset = Addr;
       Offset = CurDAG->getTargetConstant(CVal, DL, VT);
     } else {
       int64_t Lo = SignExtend64<12>(CVal);
       int64_t Hi = (uint64_t)CVal - (uint64_t)Lo;
-      Base = SDValue(CurDAG->getMachineNode(CustomXPU::LUI, DL, VT,
+      Base = SDValue(CurDAG->getMachineNode({{ Xpu }}::LUI, DL, VT,
                                             CurDAG->getTargetConstant(Hi, DL, VT)), 0);
       Offset = CurDAG->getTargetConstant(Lo, DL, VT);
     }

@@ -49,6 +49,10 @@ bool
   MachineInstr &MI = *MBBI;
   MachineBasicBlock &MBB = *MI.getParent();
   MachineFunction &MF = *MBB.getParent();
+  const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
+  DebugLoc DL;
+  if (MBBI != MBB.end())
+    DL = MBBI->getDebugLoc();
 
   unsigned i = 0;
   while (!MI.getOperand(i).isFI()) {
@@ -61,61 +65,64 @@ bool
   uint64_t StackSize = MF.getFrameInfo().getStackSize();
   int64_t SpOffset = MF.getFrameInfo().getObjectOffset(FrameIndex);
 
-  if (MI.getOpcode() == {{ Xpu }}::ADD) {
-    // before:
-    //   lui  t0, imm_hi
-    //   addi t1, t0, imm_lo
-    //   add  dst, frame_addr, t1
-    // aftter:
-    //   lui  t0, imm_hi+off_hi
-    //   addi t1, t0, imm_lo+off_lo
-    //   add  dst, x2, t1
-    MachineInstr *Lui = nullptr;
-    MachineInstr *Addi = nullptr;
-    Register RegT1 = MI.getOperand(i+1).getReg();
-    Register RegT0;
-    auto II = MBBI.getReverse();
-    for (; II != MBB.rend(); II++) {
-      MachineInstr &MII = *II;
-      if (MII.getOpcode() == {{ Xpu }}::ADDI && MII.getOperand(0).getReg() == RegT1) {
-        Addi = &MII;
-        RegT0 = MII.getOperand(1).getReg();
-        break;
-      }
-    }
-    for (; II != MBB.rend(); II++) {
-      MachineInstr &MII = *II;
-      if (MII.getOpcode() == {{ Xpu }}::LUI && MII.getOperand(0).getReg() == RegT0) {
-        Lui = &MII;
-        break;
-      }
-    }
+  int64_t OldOffset = MI.getOperand(i+1).getImm();
 
-    int64_t OldHi20 = 0;
-    int64_t OldLo12 = 0;
-    if (Lui)
-      Lui->getOperand(1).getImm();
-    if (Addi)
-      Addi->getOperand(2).getImm();
-    int64_t OldValue = (OldHi20 << 12) + OldLo12;
+  int64_t NewOffset = SpOffset + (int64_t)StackSize;
+  NewOffset += OldOffset;
 
-    int64_t NewValue = SpOffset + (int64_t)StackSize;
-    NewValue += OldValue;
+  // before:
+  //   PseudoFI_ld/st val, fiaddr, fioff
+  // aftter (small offset):
+  //   ld/st val, sp, fioff+spoff
+  // aftter (large offset):
+  //   lui  t0, fioff_hi+spoff_hi
+  //   add  dstaddr, sp, t0
+  //   ld/st val, dstaddr, fioff_lo+spoff_lo
 
-    int64_t NewLo12 = SignExtend64<12>(NewValue);
-    int64_t NewHi20 = ((NewValue - NewLo12) >> 12);
-    if (NewHi20 > 0)
-      assert ((Lui && NewHi20) && "FrameIndex should be converted to LUI & ADDI & ADD");
+  int64_t NewLo12 = SignExtend64<12>(NewOffset);
+  int64_t NewHi20 = ((NewOffset - NewLo12) >> 12);
 
-    if (Lui)
-      Lui->getOperand(1).setImm(NewHi20);
-    if (Addi)
-      Addi->getOperand(2).setImm(NewLo12);
-    MI.getOperand(i+0).ChangeToRegister(FrameReg, false);
-  } else {
-    // callseq_start, callseq_end
-    MI.getOperand(i+0).ChangeToRegister(FrameReg, false);
-    MI.getOperand(i+1).ChangeToImmediate(SpOffset);
+  MI.getOperand(i+0).ChangeToRegister(FrameReg, false);
+  MI.getOperand(i+1).ChangeToImmediate(NewLo12);
+
+  if (NewHi20) {
+    MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+    Register TempReg = MRI.createVirtualRegister(&{{ Xpu }}::GPRRegClass);
+    BuildMI(MBB, MBBI, DL, TII->get({{ Xpu }}::LUI), TempReg)
+      .addImm(NewHi20);
+    BuildMI(MBB, MBBI, DL, TII->get({{ Xpu }}::ADD), TempReg)
+      .addReg(FrameReg)
+      .addReg(TempReg);
+    MI.getOperand(i+0).ChangeToRegister(TempReg, false);
+  }
+
+  DenseMap<unsigned, unsigned> LoadMap;
+  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LB, {{ Xpu }}::LB));
+  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LH, {{ Xpu }}::LH));
+  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LW, {{ Xpu }}::LW));
+  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LBU, {{ Xpu }}::LBU));
+  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LHU, {{ Xpu }}::LHU));
+  DenseMap<unsigned, unsigned> StoreMap;
+  StoreMap.insert(std::make_pair({{ Xpu }}::PseudoFI_SB, {{ Xpu }}::SB));
+  StoreMap.insert(std::make_pair({{ Xpu }}::PseudoFI_SH, {{ Xpu }}::SH));
+  StoreMap.insert(std::make_pair({{ Xpu }}::PseudoFI_SW, {{ Xpu }}::SW));
+
+  if (MI.getOpcode() == {{ Xpu }}::PseudoFI_LA) {
+    BuildMI(MBB, MBBI, DL, TII->get({{ Xpu }}::ADDI), MI.getOperand(0).getReg())
+      .addReg(MI.getOperand(1).getReg())
+      .addImm(MI.getOperand(2).getImm());
+    MI.eraseFromParent();
+  } else if (LoadMap.contains(MI.getOpcode())) {
+    BuildMI(MBB, MBBI, DL, TII->get(LoadMap[MI.getOpcode()]), MI.getOperand(0).getReg())
+      .addReg(MI.getOperand(1).getReg())
+      .addImm(MI.getOperand(2).getImm());
+    MI.eraseFromParent();
+  } else if (StoreMap.contains(MI.getOpcode())) {
+    BuildMI(MBB, MBBI, DL, TII->get(StoreMap[MI.getOpcode()]))
+      .addReg(MI.getOperand(0).getReg())
+      .addReg(MI.getOperand(1).getReg())
+      .addImm(MI.getOperand(2).getImm());
+    MI.eraseFromParent();
   }
 
   return false;

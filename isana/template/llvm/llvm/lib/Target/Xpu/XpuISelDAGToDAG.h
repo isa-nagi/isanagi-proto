@@ -38,10 +38,7 @@ private:
 
   void Select(SDNode *N) override;
 
-  bool SelectAddrFrameIndex(SDValue Addr, SDValue &Base);
   bool SelectAddrFrameIndexRegImm(SDValue Addr, SDValue &Base, SDValue &Offset);
-  bool SelectAddrGlobal(SDValue Addr, SDValue &Base);
-  bool SelectAddrGlobalRegImm(SDValue Addr, SDValue &Base, SDValue &Offset);
   bool SelectAddrRegImm(SDValue Addr, SDValue &Base, SDValue &Offset);
 
   // virtual bool trySelect(SDNode *Node) = 0;
