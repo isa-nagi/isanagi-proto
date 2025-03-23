@@ -519,9 +519,9 @@ class LLVMCompiler():
 
         kwargs = {
             "reserved_regs": reserved_regs,
-            "reg0": reg0,
-            "sp": sp,
-            "fp": fp,
+            "REG0": reg0,
+            "SP": sp,
+            "FP": fp,
         }
         fpath = "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.cpp"
         self._read_template_and_write(fpath, kwargs)
@@ -780,7 +780,7 @@ class LLVMCompiler():
                     sp = reg.label.upper()
 
         kwargs = {
-            "sp": sp,
+            "SP": sp,
         }
         fpath = "llvm/lib/Target/{Xpu}/{Xpu}FrameLowering.cpp"
         self._read_template_and_write(fpath, kwargs)
@@ -931,7 +931,19 @@ class LLVMCompiler():
 
     # llvm/lib/Target/Xpu/MCTargetDesc/
     def gen_asmbackend_h(self):
+        gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
+        sp = None
+        ra = None
+        if gpr:
+            for reg in gpr.regs:
+                if ra is None and (reg.is_return_address):
+                    ra = reg.label.upper()
+                if sp is None and (reg.is_stack_pointer):
+                    sp = reg.label.upper()
+
         kwargs = {
+            "RA": ra,
+            "SP": sp,
         }
         fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}AsmBackend.h"
         self._read_template_and_write(fpath, kwargs)
@@ -1026,8 +1038,16 @@ class LLVMCompiler():
         fixups = self._fixups
         fixup_relocs = [fx for fx in fixups if not isinstance(fx.bin, int)]
 
+        gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
+        ra = None
+        if gpr:
+            for reg in gpr.regs:
+                if ra is None and (reg.is_return_address):
+                    ra = reg.label.upper()
+
         kwargs = {
             "fixup_relocs": fixup_relocs,
+            "RA": ra,
         }
         fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCCodeEmitter.cpp"
         self._read_template_and_write(fpath, kwargs)

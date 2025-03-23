@@ -44,7 +44,7 @@ static MCInstrInfo *create{{ Xpu }}MCInstrInfo() {
 
 static MCRegisterInfo *create{{ Xpu }}MCRegisterInfo(const Triple &TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
-  Init{{ Xpu }}MCRegisterInfo(X, {{ Xpu }}::X1); // defined in {{ Xpu }}GenRegisterInfo.inc
+  Init{{ Xpu }}MCRegisterInfo(X, {{ Xpu }}::{{ RA }}); // defined in {{ Xpu }}GenRegisterInfo.inc
   return X;
 }
 
@@ -67,7 +67,7 @@ static MCAsmInfo *create{{ Xpu }}MCAsmInfo(const MCRegisterInfo &MRI,
                                            const Triple &TT,
                                            const MCTargetOptions &Options) {
   MCAsmInfo *MAI = new {{ Xpu }}MCAsmInfo(TT);
-  unsigned SP = MRI.getDwarfRegNum({{ Xpu }}::X2, true);
+  unsigned SP = MRI.getDwarfRegNum({{ Xpu }}::{{ SP }}, true);
   MCCFIInstruction Inst = MCCFIInstruction::cfiDefCfa(nullptr, SP, 0);
   MAI->addInitialFrameState(Inst);
   return MAI;

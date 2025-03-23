@@ -319,7 +319,7 @@ SDValue
     /* MemOpChains.push_back(passArgOnStack(...)); */ {
       if (!IsTailCall) {
         if (!StackPtr.getNode())
-          StackPtr = DAG.getCopyFromReg(Chain, DL, {{ Xpu }}::X2, PtrVT);
+          StackPtr = DAG.getCopyFromReg(Chain, DL, {{ Xpu }}::{{ SP }}, PtrVT);
         SDValue PtrOff =
             DAG.getNode(ISD::ADD, DL, getPointerTy(DAG.getDataLayout()), StackPtr,
                         DAG.getIntPtrConstant(VA.getLocMemOffset(), DL));

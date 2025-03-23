@@ -93,7 +93,7 @@ void
 
   if (MI.getOpcode() == {{ Xpu }}::PseudoCALL) {
     Func = MI.getOperand(0);
-    Ra = {{ Xpu }}::X1;
+    Ra = {{ Xpu }}::{{ RA }};
   }
 
   assert(Func.isExpr() && "Expected expression");

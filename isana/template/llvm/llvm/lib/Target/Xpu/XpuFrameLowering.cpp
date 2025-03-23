@@ -33,8 +33,8 @@ void {{ Xpu }}FrameLowering::emitPrologue(
   if (StackSize == 0 && !MFI.adjustsStack())
     return;
 
-  Register DstReg = {{ Xpu }}::{{ sp }};
-  Register SrcReg = {{ Xpu }}::{{ sp }};
+  Register DstReg = {{ Xpu }}::{{ SP }};
+  Register SrcReg = {{ Xpu }}::{{ SP }};
   TII.addImmediate(DstReg, SrcReg, -StackSize, MBB, MBBI);
 }
 
@@ -53,8 +53,8 @@ void {{ Xpu }}FrameLowering::emitEpilogue(
   if (StackSize == 0)
     return;
 
-  Register DstReg = {{ Xpu }}::{{ sp }};
-  Register SrcReg = {{ Xpu }}::{{ sp }};
+  Register DstReg = {{ Xpu }}::{{ SP }};
+  Register SrcReg = {{ Xpu }}::{{ SP }};
   TII.addImmediate(DstReg, SrcReg, StackSize, MBB, MBBI);
 }
 
@@ -79,8 +79,8 @@ MachineBasicBlock::iterator
     if (MBBI->getOpcode() == {{ Xpu }}::ADJCALLSTACKDOWN)
       Amount = -Amount;
 
-    Register DstReg = {{ Xpu }}::X2;
-    Register SrcReg = {{ Xpu }}::X2;
+    Register DstReg = {{ Xpu }}::{{ SP }};
+    Register SrcReg = {{ Xpu }}::{{ SP }};
     TII.addImmediate(DstReg, SrcReg, Amount, MBB, MBBI);
   }
 

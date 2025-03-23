@@ -20,7 +20,7 @@ using namespace llvm;
 #include "{{ Xpu }}GenRegisterInfo.inc"
 
 {{ Xpu }}RegisterInfo::{{ Xpu }}RegisterInfo()
-    : {{ Xpu }}GenRegisterInfo({{ Xpu }}::{{ reg0 }}) {}
+    : {{ Xpu }}GenRegisterInfo({{ Xpu }}::{{ REG0 }}) {}
 
 const MCPhysReg *
 {{ Xpu }}RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
@@ -60,7 +60,7 @@ bool
     assert(i < MI.getNumOperands() && "Instr doesn't have FrameIndex operand!");
   }
 
-  Register FrameReg = {{ Xpu }}::X2;
+  Register FrameReg = {{ Xpu }}::{{ SP }};
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
   uint64_t StackSize = MF.getFrameInfo().getStackSize();
   int64_t SpOffset = MF.getFrameInfo().getObjectOffset(FrameIndex);
