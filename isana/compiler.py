@@ -49,6 +49,14 @@ class RegisterClassDef(KwargsClass):
         'bitsize',
     )
 
+
+class RegisterInfo(KwargsClass):
+    keys = (
+        'RA',
+        'SP',
+        'FP',
+    )
+
 class AsmOperandCls(KwargsClass):
     keys = (
         'name',
@@ -244,23 +252,13 @@ class LLVMCompiler():
     def __init__(self, isa):
         self.isa = isa
         self.outdir = "out"
-        self._init_fixups()
+        self._prepare_processorinfo()
 
     @property
     def template_dir(self):
         return os.path.join(os.path.dirname(__file__), "template", "llvm")
 
-    def _init_fixups(self):
-        if len(self.fixups) > 0:
-            fixups = self.fixups[:]
-        else:
-            fixups = auto_make_fixups(self.isa)
-        for fixup in fixups:
-            fixup.namespace = self.namespace
-            fixup.name_enum = f"fixup_{fixup.namespace.lower()}_{fixup.name}"
-        self._fixups = fixups
-
-    def _read_template_and_write(self, fpath, tmp_kwargs):
+    def _read_template_and_write(self, fpath):
         fdirs, fname = os.path.split(fpath)
         fdirs = fdirs.split("/")
         template_fdir = os.path.join(self.template_dir, *[d.format(Xpu="Xpu") for d in fdirs])
@@ -268,6 +266,7 @@ class LLVMCompiler():
         template_fpath = os.path.join(template_fdir, template_fname)
         with open(template_fpath) as f:
             template_str = f.read()
+        tmp_kwargs = dict(self.kwargs)
         tmp_kwargs.update({
             'Xpu': self.namespace,
             'XPU': self.namespace.upper(),
@@ -284,167 +283,12 @@ class LLVMCompiler():
         with open(out_fpath, "w") as f:
             f.write(final_text)
 
-    def gen_llvm_srcs(self):
-        self.gen_llvm_clang_srcs()
-        self.gen_llvm_lld_srcs()
-        self.gen_llvm_llvm_srcs()
+    def _prepare_processorinfo(self):
+        reginfo = self._prepare_registerinfo()
+        instrinfo = self._prepare_instrinfo()
+        self.kwargs = {**reginfo, **instrinfo}
 
-    def gen_llvm_clang_srcs(self):
-        self.gen_llvm_clang_include_clang_basic_builtinsxpu_def()
-        self.gen_llvm_clang_include_clang_basic_targetbuiltins_h()
-        self.gen_llvm_clang_lib_basic_targets_xpu_cpp()
-        self.gen_llvm_clang_lib_basic_targets_xpu_h()
-        self.gen_cmakelists_txt("clang/lib/Basic")
-        self.gen_llvm_clang_lib_basic_targets_cpp()
-        self.gen_llvm_clang_lib_driver_toolchains_baremetal_cpp()
-
-    def gen_llvm_clang_include_clang_basic_builtinsxpu_def(self):
-        kwargs = {
-        }
-        fpath = "clang/include/clang/Basic/Builtins{Xpu}.def"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_llvm_clang_include_clang_basic_targetbuiltins_h(self):
-        kwargs = {
-        }
-        fpath = "clang/include/clang/Basic/TargetBuiltins.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_llvm_clang_lib_basic_targets_xpu_cpp(self):
-        gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
-        ret_regs = []
-        if gpr:
-            ret_regs = list(filter(lambda r: r.is_ret, gpr.regs))
-
-        kwargs = {
-            "gpr": gpr,
-            "ret_regs": ret_regs,
-        }
-        fpath = "clang/lib/Basic/Targets/{Xpu}.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_llvm_clang_lib_basic_targets_xpu_h(self):
-        kwargs = {
-        }
-        fpath = "clang/lib/Basic/Targets/{Xpu}.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_llvm_clang_lib_basic_targets_cpp(self):
-        kwargs = {
-        }
-        fpath = "clang/lib/Basic/Targets.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_llvm_clang_lib_driver_toolchains_baremetal_cpp(self):
-        kwargs = {
-        }
-        fpath = "clang/lib/Driver/ToolChains/BareMetal.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_llvm_lld_srcs(self):
-        self.gen_lld_elf_arch_xpu_cpp()
-
-    def gen_lld_elf_arch_xpu_cpp(self):
-        fixups = self._fixups
-        fixups_pc_rel = [fx for fx in fixups if fx.name[:6] == "pc_rel"]
-        fixup_relocs = fixups[:]
-
-        kwargs = {
-            "fixups_pc_rel": fixups_pc_rel,
-            "fixup_relocs": fixup_relocs,
-        }
-        fpath = "lld/ELF/Arch/{Xpu}.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_llvm_llvm_srcs(self):
-        self.gen_llvm_lib_target()
-
-    def gen_llvm_lib_target(self):
-        self.gen_llvm_lib_object_elf_cpp()
-        self.gen_llvm_lib_targetparser_triple_cpp()
-
-        self.gen_elfrelocs_xpu_def()
-
-        self.gen_asmparser_dir()
-        self.gen_disassembler_dir()
-        self.gen_mctargetdesc_dir()
-        self.gen_targetinfo_dir()
-
-        self.gen_cmakelists_txt("llvm/lib/Target/{Xpu}")
-        self.gen_xpu_h()
-        self.gen_xpu_td()
-        self.gen_asmprinter_cpp()
-        self.gen_callingconv_td()
-        self.gen_framelowering_cpp()
-        self.gen_framelowering_h()
-        self.gen_instrinfo_cpp()
-        self.gen_instrinfo_h()
-        self.gen_instrinfo_td()
-        self.gen_iseldagtodag_cpp()
-        self.gen_iseldagtodag_h()
-        self.gen_isellowering_cpp()
-        self.gen_isellowering_h()
-        self.gen_machinefunctioninfo_cpp()
-        self.gen_machinefunctioninfo_h()
-        self.gen_registerinfo_td()
-        self.gen_registerinfo_cpp()
-        self.gen_registerinfo_h()
-        self.gen_schedule_td()
-        self.gen_subtarget_cpp()
-        self.gen_subtarget_h()
-        self.gen_targetmachine_cpp()
-        self.gen_targetmachine_h()
-
-    def gen_elfrelocs_xpu_def(self):
-        fixups = self._fixups
-
-        kwargs = {
-            "fixups": fixups,
-        }
-        fpath = "llvm/include/llvm/BinaryFormat/ELFRelocs/{Xpu}.def"
-        self._read_template_and_write(fpath, kwargs)
-
-    # llvm/lib/Target/Xpu/*
-    def gen_xpu_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_xpu_td(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}.td"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_asmprinter_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}AsmPrinter.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_callingconv_td(self):
-        callee_saved_regs = []
-        arg_regs = []
-        ret_regs = []
-        gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
-        if gpr:
-            regs = list(filter(lambda r: r.is_callee_saved, gpr.regs))
-            callee_saved_regs = ', '.join([r.label.upper() for r in regs])
-            regs = list(filter(lambda r: r.is_arg, gpr.regs))
-            arg_regs = ', '.join([r.label.upper() for r in regs])
-            regs = list(filter(lambda r: r.is_ret, gpr.regs))
-            ret_regs = ', '.join([r.label.upper() for r in regs])
-
-        kwargs = {
-            "callee_saved_regs": callee_saved_regs,
-            "arg_regs": arg_regs,
-            "ret_regs": ret_regs,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}CallingConv.td"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_registerinfo_td(self):
+    def _prepare_registerinfo(self):
         reg_base_tables = {}
         for reggroup in self.isa.registers:
             for reg in reggroup:
@@ -481,30 +325,36 @@ class LLVMCompiler():
                     dwarfno=reg.dwarf_number,
                 ))
 
+        def reg_varname(reg, reggroup):
+            if reggroup.label == "GPR":
+                return reg.label.upper()
+            else:
+                return "{}_{}".format(reg.label, reggroup.label).upper()
+
         regcls_defs = []
         for reggroup in self.isa.registers:
             if reggroup.label == "PCR":
                 continue
+            reg_varnames = ["{}::{}".format(
+                self.namespace, reg.label.upper()) for reg in reggroup]
+            reg_varnames = ',\n'.join(reg_varnames)
             regcls_defs.append(RegisterClassDef(
                 varname=reggroup.label,
+                regs=reggroup.regs,
+                # reg_varnames=reg_varnames,
                 reg_varnames=','.join([reg.label.upper() for reg in reggroup]),
                 bitsize=int(len(reggroup.regs) - 1).bit_length(),
             ))
 
-        kwargs = {
-            "reg_bases": reg_bases,
-            "reg_defs": reg_defs,
-            "regcls_defs": regcls_defs,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.td"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_registerinfo_cpp(self):
         reserved_regs = []
         gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
         reg0 = None
         sp = None
         fp = None
+        ra = None
+        arg_regs = []
+        ret_regs = []
+        callee_saved_regs = []
         if gpr:
             reg0 = gpr.regs[0].label.upper()
             for reg in gpr.regs:
@@ -516,23 +366,34 @@ class LLVMCompiler():
                     sp = reg.label.upper()
                 if fp is None and (reg.is_frame_pointer):
                     fp = reg.label.upper()
+                if ra is None and (reg.is_return_address):
+                    ra = reg.label.upper()
+            regs = list(filter(lambda r: r.is_arg, gpr.regs))
+            arg_regs = ', '.join(["{}::{}".format(self.namespace, r.label.upper()) for r in regs])
+            regs = list(filter(lambda r: r.is_ret, gpr.regs))
+            ret_regs = ', '.join([r.label.upper() for r in regs])
+            regs = list(filter(lambda r: r.is_callee_saved, gpr.regs))
+            callee_saved_regs = ', '.join([r.label.upper() for r in regs])
 
         kwargs = {
+            "reg_bases": reg_bases,
+            "reg_defs": reg_defs,
+            "regcls_defs": regcls_defs,
             "reserved_regs": reserved_regs,
+            "gpr": gpr,
             "REG0": reg0,
             "SP": sp,
             "FP": fp,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.cpp"
-        self._read_template_and_write(fpath, kwargs)
+            "RA": ra,
 
-    def gen_registerinfo_h(self):
-        kwargs = {
+            "callee_saved_regs": callee_saved_regs,
+            "arg_regs": arg_regs,
+            "ret_regs": ret_regs,
         }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.h"
-        self._read_template_and_write(fpath, kwargs)
+        return kwargs
 
-    def gen_instrinfo_td(self):
+    def _prepare_instrinfo(self):
+        # -- InstrInfo.td --
         asm_operand_clss = []
         operand_clss = []
         operand_types = []
@@ -747,6 +608,35 @@ class LLVMCompiler():
         gen_li_defs = "\n".join(xforms) + "\n\n" + "\n".join(li_pats)
         li32_dag = dags[0][1]
 
+        instr_bitsizes = list(set([ins().bitsize for ins in self.isa.instructions]))
+
+        # llvm/lib/Target/Xpu/AsmParser/
+        asm_operand_clss = []
+        for imm in self.isa.immediates:
+            if isinstance(imm.enums, dict):
+                asm_operand_cls = AsmOperandCls(
+                    name=imm.label,
+                    enums=imm.enums,
+                )
+                asm_operand_clss.append(asm_operand_cls)
+
+        # llvm/lib/Target/Xpu/MCTargetDesc/AsmBackend.cpp
+        if len(self.fixups) > 0:
+            fixups = self.fixups[:]
+        else:
+            fixups = auto_make_fixups(self.isa)
+        for fixup in fixups:
+            fixup.namespace = self.namespace
+            fixup.name_enum = f"fixup_{fixup.namespace.lower()}_{fixup.name}"
+        self._fixups = fixups
+
+        fixups = self._fixups
+        fixups_should_force_reloc = list()
+        fixups_adjust = fixups[:]
+        relax_instrs = list()
+        fixups_pc_rel = [fx for fx in fixups if fx.name[:6] == "pc_rel"]
+        fixup_relocs = [fx for fx in fixups if not isinstance(fx.bin, int)]
+
         kwargs = {
             "asm_operand_clss": asm_operand_clss,
             "operand_clss": operand_clss,
@@ -755,371 +645,97 @@ class LLVMCompiler():
             "instr_defs": instr_defs,
             "gen_li_defs": gen_li_defs,
             "li32_dag": li32_dag,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}InstrInfo.td"
-        self._read_template_and_write(fpath, kwargs)
 
-    def gen_instrinfo_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}InstrInfo.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_instrinfo_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}InstrInfo.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_framelowering_cpp(self):
-        gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
-        sp = None
-        if gpr:
-            for reg in gpr.regs:
-                if sp is None and (reg.is_stack_pointer):
-                    sp = reg.label.upper()
-
-        kwargs = {
-            "SP": sp,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}FrameLowering.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_framelowering_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}FrameLowering.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_isellowering_cpp(self):
-        arg_regs = []
-        gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
-        if gpr:
-            regs = list(filter(lambda r: r.is_arg, gpr.regs))
-            arg_regs = ', '.join(["{}::{}".format(self.namespace, r.label.upper()) for r in regs])
-        kwargs = {
-            "arg_regs": arg_regs,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}ISelLowering.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_isellowering_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}ISelLowering.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_iseldagtodag_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}ISelDAGToDAG.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_iseldagtodag_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}ISelDAGToDAG.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_machinefunctioninfo_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}MachineFunctionInfo.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_machinefunctioninfo_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}MachineFunctionInfo.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_schedule_td(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}Schedule.td"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_subtarget_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}Subtarget.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_subtarget_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}Subtarget.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_targetmachine_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}TargetMachine.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_targetmachine_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/{Xpu}TargetMachine.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_cmakelists_txt(self, fdirs):
-        kwargs = {
-        }
-        fpath = fdirs + "/CMakeLists.txt"
-        self._read_template_and_write(fpath, kwargs)
-
-    # llvm/lib/Target/Xpu/AsmParser/
-    def gen_asmparser_cpp(self):
-        asm_operand_clss = []
-        for imm in self.isa.immediates:
-            if isinstance(imm.enums, dict):
-                asm_operand_cls = AsmOperandCls(
-                    name=imm.label,
-                    enums=imm.enums,
-                )
-                asm_operand_clss.append(asm_operand_cls)
-
-        kwargs = {
-            "asm_operand_clss": asm_operand_clss,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/AsmParser/{Xpu}AsmParser.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_asmparser_dir(self):
-        self.gen_cmakelists_txt("llvm/lib/Target/{Xpu}/AsmParser")
-        self.gen_asmparser_cpp()
-
-    # llvm/lib/Target/Xpu/Disassembler/
-    def gen_disassembler_cpp(self):
-
-        def reg_varname(reg, reggroup):
-            if reggroup.label == "GPR":
-                return reg.label.upper()
-            else:
-                return "{}_{}".format(reg.label, reggroup.label).upper()
-
-        instr_bitsizes = list(set([ins().bitsize for ins in self.isa.instructions]))
-
-        regcls_defs = []
-        for reggroup in self.isa.registers:
-            if reggroup.label == "PCR":
-                continue
-            reg_varnames = ["{}::{}".format(
-                self.namespace, reg.label.upper()) for reg in reggroup]
-            reg_varnames = ',\n'.join(reg_varnames)
-            regcls_defs.append(RegisterClassDef(
-                varname=reggroup.label,
-                regs=reggroup.regs,
-                # reg_varnames=','.join([reg.label.upper() for reg in reggroup]),
-                # reg_varnames=','.join([reg_varname(reg, reggroup) for reg in reggroup]),
-                reg_varnames=reg_varnames,
-                bitsize=int(len(reggroup.regs) - 1).bit_length(),
-            ))
-
-        kwargs = {
-            # "gpr_regs": gpr_regs,
             "instr_bitsizes": instr_bitsizes,
-            "regcls_defs": regcls_defs,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/Disassembler/{Xpu}Disassembler.cpp"
-        self._read_template_and_write(fpath, kwargs)
 
-    def gen_disassembler_dir(self):
-        self.gen_cmakelists_txt("llvm/lib/Target/{Xpu}/Disassembler")
-        self.gen_disassembler_cpp()
+            "asm_operand_clss": asm_operand_clss,
 
-    # llvm/lib/Target/Xpu/MCTargetDesc/
-    def gen_asmbackend_h(self):
-        gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
-        sp = None
-        ra = None
-        if gpr:
-            for reg in gpr.regs:
-                if ra is None and (reg.is_return_address):
-                    ra = reg.label.upper()
-                if sp is None and (reg.is_stack_pointer):
-                    sp = reg.label.upper()
-
-        kwargs = {
-            "RA": ra,
-            "SP": sp,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}AsmBackend.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_asmbackend_cpp(self):
-        fixups = self._fixups
-        fixups_should_force_reloc = list()
-        fixups_adjust = fixups[:]
-        relax_instrs = list()
-
-        kwargs = {
             "fixups": fixups,
             "fixups_should_force_reloc": fixups_should_force_reloc,
             "fixups_adjust": fixups_adjust,
             "relax_instrs": relax_instrs,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}AsmBackend.cpp"
-        self._read_template_and_write(fpath, kwargs)
 
-    def gen_baseinfo_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}BaseInfo.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_elfobjectwriter_cpp(self):
-        fixups = self._fixups
-        fixups_pc_rel = [fx for fx in fixups if fx.name[:6] == "pc_rel"]
-        fixup_relocs = [fx for fx in fixups if not isinstance(fx.bin, int)]
-
-        kwargs = {
             "fixups_pc_rel": fixups_pc_rel,
             "fixup_relocs": fixup_relocs,
         }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}ELFObjectWriter.cpp"
-        self._read_template_and_write(fpath, kwargs)
+        return kwargs
 
-    def gen_fixupkinds_h(self):
-        fixups = self._fixups
+    def gen_llvm_srcs(self):
+        self.gen_llvm_clang_srcs()
+        self.gen_llvm_lld_srcs()
+        self.gen_llvm_llvm_srcs()
 
-        kwargs = {
-            "fixups": fixups,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}FixupKinds.h"
-        self._read_template_and_write(fpath, kwargs)
+    def gen_llvm_clang_srcs(self):
+        fpaths = (
+            "clang/include/clang/Basic/Builtins{Xpu}.def",
+            "clang/include/clang/Basic/TargetBuiltins.h",
+            "clang/lib/Basic/Targets/{Xpu}.cpp",
+            "clang/lib/Basic/Targets/{Xpu}.h",
+            "clang/lib/Basic/Targets.cpp",
+            "clang/lib/Basic/CMakeLists.txt",
+            "clang/lib/Driver/ToolChains/BareMetal.cpp",
+        )
+        for fpath in fpaths:
+            self._read_template_and_write(fpath)
 
-    def gen_instprinter_cpp(self):
-        asm_operand_clss = []
-        for imm in self.isa.immediates:
-            if isinstance(imm.enums, dict):
-                asm_operand_cls = AsmOperandCls(
-                    name=imm.label,
-                    enums=imm.enums,
-                )
-                asm_operand_clss.append(asm_operand_cls)
+    def gen_llvm_lld_srcs(self):
+        fpaths = (
+            "lld/ELF/Arch/{Xpu}.cpp",
+        )
+        for fpath in fpaths:
+            self._read_template_and_write(fpath)
 
-        kwargs = {
-            "asm_operand_clss": asm_operand_clss,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}InstPrinter.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_instprinter_h(self):
-        asm_operand_clss = []
-        for imm in self.isa.immediates:
-            if isinstance(imm.enums, dict):
-                asm_operand_cls = AsmOperandCls(
-                    name=imm.label,
-                    enums=imm.enums,
-                )
-                asm_operand_clss.append(asm_operand_cls)
-
-        kwargs = {
-            "asm_operand_clss": asm_operand_clss,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}InstPrinter.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_mcasminfo_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCAsmInfo.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_mcasminfo_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCAsmInfo.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_mccodeemitter_cpp(self):
-        fixups = self._fixups
-        fixup_relocs = [fx for fx in fixups if not isinstance(fx.bin, int)]
-
-        gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
-        ra = None
-        if gpr:
-            for reg in gpr.regs:
-                if ra is None and (reg.is_return_address):
-                    ra = reg.label.upper()
-
-        kwargs = {
-            "fixup_relocs": fixup_relocs,
-            "RA": ra,
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCCodeEmitter.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_mcexpr_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCExpr.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_mcexpr_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCExpr.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_mctargetdesc_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCTargetDesc.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_mctargetdesc_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCTargetDesc.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_llvm_lib_object_elf_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Object/ELF.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_llvm_lib_targetparser_triple_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/TargetParser/Triple.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_mctargetdesc_dir(self):
-        self.gen_cmakelists_txt("llvm/lib/Target/{Xpu}/MCTargetDesc")
-        self.gen_asmbackend_cpp()
-        self.gen_asmbackend_h()
-        self.gen_asmbackend_cpp()
-        self.gen_baseinfo_h()
-        self.gen_elfobjectwriter_cpp()
-        self.gen_fixupkinds_h()
-        self.gen_instprinter_cpp()
-        self.gen_instprinter_h()
-        self.gen_mcasminfo_cpp()
-        self.gen_mcasminfo_h()
-        self.gen_mccodeemitter_cpp()
-        self.gen_mcexpr_cpp()
-        self.gen_mcexpr_h()
-        self.gen_mctargetdesc_cpp()
-        self.gen_mctargetdesc_h()
-
-    # llvm/lib/Target/Xpu/TargetInfo/
-    def gen_targetinfo_cpp(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/TargetInfo/{Xpu}TargetInfo.cpp"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_targetinfo_h(self):
-        kwargs = {
-        }
-        fpath = "llvm/lib/Target/{Xpu}/TargetInfo/{Xpu}TargetInfo.h"
-        self._read_template_and_write(fpath, kwargs)
-
-    def gen_targetinfo_dir(self):
-        self.gen_cmakelists_txt("llvm/lib/Target/{Xpu}/TargetInfo")
-        self.gen_targetinfo_cpp()
-        self.gen_targetinfo_h()
+    def gen_llvm_llvm_srcs(self):
+        fpaths = (
+            "llvm/include/llvm/BinaryFormat/ELFRelocs/{Xpu}.def",
+            "llvm/lib/Object/ELF.cpp",
+            "llvm/lib/Target/{Xpu}/CMakeLists.txt",
+            "llvm/lib/Target/{Xpu}/{Xpu}.h",
+            "llvm/lib/Target/{Xpu}/{Xpu}.td",
+            "llvm/lib/Target/{Xpu}/{Xpu}AsmPrinter.cpp",
+            "llvm/lib/Target/{Xpu}/{Xpu}CallingConv.td",
+            "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.td",
+            "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.cpp",
+            "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.h",
+            "llvm/lib/Target/{Xpu}/{Xpu}InstrInfo.td",
+            "llvm/lib/Target/{Xpu}/{Xpu}InstrInfo.cpp",
+            "llvm/lib/Target/{Xpu}/{Xpu}InstrInfo.h",
+            "llvm/lib/Target/{Xpu}/{Xpu}FrameLowering.cpp",
+            "llvm/lib/Target/{Xpu}/{Xpu}FrameLowering.h",
+            "llvm/lib/Target/{Xpu}/{Xpu}ISelLowering.cpp",
+            "llvm/lib/Target/{Xpu}/{Xpu}ISelLowering.h",
+            "llvm/lib/Target/{Xpu}/{Xpu}ISelDAGToDAG.cpp",
+            "llvm/lib/Target/{Xpu}/{Xpu}ISelDAGToDAG.h",
+            "llvm/lib/Target/{Xpu}/{Xpu}MachineFunctionInfo.cpp",
+            "llvm/lib/Target/{Xpu}/{Xpu}MachineFunctionInfo.h",
+            "llvm/lib/Target/{Xpu}/{Xpu}Schedule.td",
+            "llvm/lib/Target/{Xpu}/{Xpu}Subtarget.cpp",
+            "llvm/lib/Target/{Xpu}/{Xpu}Subtarget.h",
+            "llvm/lib/Target/{Xpu}/{Xpu}TargetMachine.cpp",
+            "llvm/lib/Target/{Xpu}/{Xpu}TargetMachine.h",
+            "llvm/lib/Target/{Xpu}/AsmParser/CMakeLists.txt",
+            "llvm/lib/Target/{Xpu}/AsmParser/{Xpu}AsmParser.cpp",
+            "llvm/lib/Target/{Xpu}/Disassembler/CMakeLists.txt",
+            "llvm/lib/Target/{Xpu}/Disassembler/{Xpu}Disassembler.cpp",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/CMakeLists.txt",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}AsmBackend.h",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}AsmBackend.cpp",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}BaseInfo.h",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}ELFObjectWriter.cpp",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}FixupKinds.h",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}InstPrinter.cpp",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}InstPrinter.h",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCAsmInfo.cpp",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCAsmInfo.h",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCCodeEmitter.cpp",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCExpr.cpp",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCExpr.h",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCTargetDesc.cpp",
+            "llvm/lib/Target/{Xpu}/MCTargetDesc/{Xpu}MCTargetDesc.h",
+            "llvm/lib/Target/{Xpu}/TargetInfo/CMakeLists.txt",
+            "llvm/lib/Target/{Xpu}/TargetInfo/{Xpu}TargetInfo.cpp",
+            "llvm/lib/Target/{Xpu}/TargetInfo/{Xpu}TargetInfo.h",
+            "llvm/lib/TargetParser/Triple.cpp",
+        )
+        for fpath in fpaths:
+            self._read_template_and_write(fpath)
