@@ -181,9 +181,9 @@ StringRef llvm::object::getELFRelocationTypeName(uint32_t Machine,
       break;
     }
     break;
-  case ELF::EM_CUSTOMXPU:
+  case ELF::EM_{{ XPU }}:
     switch (Type) {
-#include "llvm/BinaryFormat/ELFRelocs/CustomXPU.def"
+#include "llvm/BinaryFormat/ELFRelocs/{{ Xpu }}.def"
     default:
       break;
     }

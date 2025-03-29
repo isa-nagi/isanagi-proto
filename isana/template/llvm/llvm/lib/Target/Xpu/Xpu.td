@@ -24,8 +24,13 @@ def {{ Xpu }}AsmParser : AsmParser {
   let AllowDuplicateRegisterNames = 1;
 }
 
+def {{ Xpu }}AsmWriter : AsmWriter {
+  int PassSubtarget = 1;
+}
+
 def {{ Xpu }} : Target {
   let InstructionSet = {{ Xpu }}InstrInfo;
   let AssemblyParsers = [{{ Xpu }}AsmParser];
+  let AssemblyWriters = [{{ Xpu }}AsmWriter];
   let AllowRegisterRenaming = 1;
 }

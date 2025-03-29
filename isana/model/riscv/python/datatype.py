@@ -1,4 +1,4 @@
-from isana.isa import Immediate, ImmS
+from isana.isa import Immediate, ImmS, ImmU
 
 Imm = Immediate("Imm", width=32)
 ImmS12 = ImmS("ImmS12", width=12)
@@ -17,6 +17,7 @@ ImmS6O3 = Immediate("ImmS6O3", width=6, offset=3)
 ImmS6O4 = Immediate("ImmS6O4", width=6, offset=4)
 ImmS8O1 = ImmS("ImmS8O1", width=8, offset=1)
 ImmS2O4 = ImmS("ImmS2O4", width=2, offset=4)
+ImmU4 = ImmU("ImmU4", width=4)
 RMImm = Immediate("RMImm", width=3, enums={
     0: "rne",
     1: "rtz",

@@ -220,7 +220,7 @@ void
   switch (MI.getOpcode()) {
   default:
     break;
-  case CustomXPU::PseudoCALL:
+  case {{ Xpu }}::PseudoCALL:
     expandFunctionCall(MI, CB, Fixups, STI);
     return;
   }

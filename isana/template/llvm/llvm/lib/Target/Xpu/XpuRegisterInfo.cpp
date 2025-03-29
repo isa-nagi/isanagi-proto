@@ -131,5 +131,5 @@ bool
 Register
 {{ Xpu }}RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   const TargetFrameLowering *TFI = getFrameLowering(MF);
-  return TFI->hasFP(MF) ? {{ Xpu }}::{{ fp }} : {{ Xpu }}::{{ sp }};
+  return TFI->hasFP(MF) ? {{ Xpu }}::{{ FP }} : {{ Xpu }}::{{ SP }};
 }

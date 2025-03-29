@@ -7,7 +7,7 @@ from .memory import Mem
 from .register import PCR, GPR, GPRC, FPR, CSR
 from .datatype import (Imm, ImmS12, ImmS12O1, ImmS20O1, ImmS20O12, ImmS6, ImmS9, ImmS32O2,
                        ImmS5O2, ImmS5O3, ImmS5O4, ImmS11O1, ImmS6O2, ImmS6O3, ImmS6O4, ImmS8O1,
-                       ImmS2O4,
+                       ImmS2O4, ImmU4,
                        RMImm)
 from .instruction import instructions
 
@@ -64,6 +64,7 @@ isa = RiscvISA(
         ImmS6O4,
         ImmS8O1,
         ImmS2O4,
+        ImmU4,
         RMImm,
     ),
     instructions=tuple(instructions),

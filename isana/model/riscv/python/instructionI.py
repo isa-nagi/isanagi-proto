@@ -6,7 +6,7 @@ from .defs import xlen
 # from .register import GPR, GPRC, CSR, PCR
 from .instructionType import (
     InstrR,
-    InstrI, InstrIShift, InstrIShift64, InstrILoad,
+    InstrI, InstrIShift, InstrIShift64, InstrILoad, InstrIFence,
     InstrS,
     InstrB,
     InstrU,
@@ -416,7 +416,7 @@ class and_(InstrR):
         ctx.GPR[ins.rd] = ctx.GPR[ins.rs1] & ctx.GPR[ins.rs2]
 
 
-class fence(InstrI):
+class fence(InstrIFence):
     opn, opc = "fence", 0b0000_0000_0000_00000_000_00000_0001111
 
 

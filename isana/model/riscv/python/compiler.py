@@ -2,12 +2,17 @@ from isana.compiler import Fixup
 from isana.compiler import LLVMCompiler
 
 
-class RiscvCompiler(LLVMCompiler):
-    namespace = "CustomXPU"
-    triple = ("customxpu", "", "")
+fixups = [
+    Fixup(),
+]
 
-    def __init__(self, isa):
-        super().__init__(isa)
+
+class RiscvCompiler(LLVMCompiler):
+    namespace = "RiscvXpu"
+    triplet = ("riscvxpu32", "unknown", "elf")
+
+    def __init__(self, isa, **kwargs):
+        super().__init__(isa, **kwargs)
 
 
 compiler = RiscvCompiler

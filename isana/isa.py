@@ -338,7 +338,8 @@ class Immediate():
 
 
 class ImmU(Immediate):
-    pass
+    def __init__(self, label: str, **kwargs):
+        super().__init__(label, **kwargs)
 
 
 class ImmS(Immediate):

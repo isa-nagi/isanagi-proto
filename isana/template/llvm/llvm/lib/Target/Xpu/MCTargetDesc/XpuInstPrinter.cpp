@@ -47,8 +47,8 @@ void
   raw_ostream &O
 )
 {
-  if (!printAliasInstr(MI, Address, O))
-    printInstruction(MI, Address, O);
+  if (!printAliasInstr(MI, Address, STI, O))
+    printInstruction(MI, Address, STI, O);
   printAnnotation(O, Annot);
 }
 
@@ -63,6 +63,7 @@ void
 void
 {{ Xpu }}InstPrinter::printOperand(
   const MCInst *MI, unsigned OpNo,
+  const MCSubtargetInfo &STI,
   raw_ostream &O,
   const char *Modifier
 )
@@ -89,6 +90,7 @@ void
 {{ Xpu }}InstPrinter::print{{ asmopcls.name }}(
   const MCInst *MI,
   unsigned OpNo,
+  const MCSubtargetInfo &STI,
   raw_ostream &O
 )
 {

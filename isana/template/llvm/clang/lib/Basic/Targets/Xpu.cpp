@@ -62,9 +62,9 @@ ArrayRef<const char *> {{ Xpu }}TargetInfo::getGCCRegNames() const {
 }
 
 int {{ Xpu }}TargetInfo::getEHDataRegisterNumber(unsigned RegNo) const {
-  {%- for reg in ret_regs %}
+  {%- for regnum in ret_reg_numbers %}
   {% if not loop.first %}else {% endif %}if (RegNo == {{ loop.index - 1 }})
-    return {{ reg.number }};
+    return {{ regnum }};
   {%- endfor %}
   return -1;
 }

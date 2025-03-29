@@ -8,7 +8,9 @@ from isana.semantic import (
     get_alu_dag,
     estimate_load_immediate_dag,
 )
-from isana.isa import Immediate
+from isana.isa import (
+    Immediate,
+)
 
 
 _default_namespace = "Xpu"
@@ -369,11 +371,14 @@ class LLVMCompiler():
                 if ra is None and (reg.is_return_address):
                     ra = reg.label.upper()
             regs = list(filter(lambda r: r.is_arg, gpr.regs))
-            arg_regs = ', '.join(["{}::{}".format(self.namespace, r.label.upper()) for r in regs])
+            # arg_regs = ', '.join(["{}::{}".format(self.namespace, r.label.upper()) for r in regs])
+            # arg_regs = ', '.join([r.label.upper() for r in regs])
+            arg_regs = [r.label.upper() for r in regs]
             regs = list(filter(lambda r: r.is_ret, gpr.regs))
-            ret_regs = ', '.join([r.label.upper() for r in regs])
+            ret_regs = [r.label.upper() for r in regs]
+            ret_reg_numbers = [r.number for r in regs]
             regs = list(filter(lambda r: r.is_callee_saved, gpr.regs))
-            callee_saved_regs = ', '.join([r.label.upper() for r in regs])
+            callee_saved_regs = [r.label.upper() for r in regs]
 
         kwargs = {
             "reg_bases": reg_bases,
@@ -389,6 +394,7 @@ class LLVMCompiler():
             "callee_saved_regs": callee_saved_regs,
             "arg_regs": arg_regs,
             "ret_regs": ret_regs,
+            "ret_reg_numbers": ret_reg_numbers,
         }
         return kwargs
 
@@ -687,7 +693,12 @@ class LLVMCompiler():
 
     def gen_llvm_llvm_srcs(self):
         fpaths = (
+            "llvm/CMakeLists.txt",
             "llvm/include/llvm/BinaryFormat/ELFRelocs/{Xpu}.def",
+            "llvm/include/llvm/BinaryFormat/ELF.h",
+            "llvm/include/llvm/Object/ELFObjectFile.h",
+            "llvm/include/llvm/TargetParser/Triple.h",
+            "llvm/include/module.modulemap",
             "llvm/lib/Object/ELF.cpp",
             "llvm/lib/Target/{Xpu}/CMakeLists.txt",
             "llvm/lib/Target/{Xpu}/{Xpu}.h",

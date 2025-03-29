@@ -153,7 +153,7 @@ SDValue
 
   if (IsVarArg) {
     static const MCPhysReg ArgIGPRs[] = {  // TODO: move to {{ Xpu }}CallingConv.cpp
-      {{ arg_regs }}
+      {% for reg in arg_regs %}{% if not loop.first %}, {% endif %}{{ Xpu }}::{{ reg }}{% endfor %}
     };
     ArrayRef<MCPhysReg> ArgRegs = ArrayRef(ArgIGPRs);
     unsigned Idx = CCInfo.getFirstUnallocated(ArgRegs);
@@ -459,7 +459,7 @@ SDValue
   if (isPositionIndependent()) {
     SDValue Addr = getTargetNode(N, DL, Ty, DAG, 0);
     if (IsLocal)
-      // return DAG.getNode(CustomXPUISD::LLA, DL, Ty, Addr);
+      // return DAG.getNode({{ Xpu }}ISD::LLA, DL, Ty, Addr);
       return SDValue(DAG.getMachineNode({{ Xpu }}::ADDI, DL, Ty,
                                         DAG.getRegister({{ Xpu }}::X0, XLenVT), Addr), 0);
   }

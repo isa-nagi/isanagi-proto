@@ -84,10 +84,10 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
   case x86_64:         return "x86_64";
   case xcore:          return "xcore";
   case xtensa:         return "xtensa";
-  case customxpu32le:  return "customxpu32le";
-  case customxpu32be:  return "customxpu32be";
-  case customxpu64le:  return "customxpu64le";
-  case customxpu64be:  return "customxpu64be";
+  case {{ xpu }}32le:  return "{{ xpu }}32le";
+  case {{ xpu }}32be:  return "{{ xpu }}32be";
+  case {{ xpu }}64le:  return "{{ xpu }}64le";
+  case {{ xpu }}64be:  return "{{ xpu }}64be";
   }
 
   llvm_unreachable("Invalid ArchType!");
@@ -233,10 +233,10 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
 
   case xtensa:      return "xtensa";
 
-  case customxpu32le:
-  case customxpu32be:
-  case customxpu64le:
-  case customxpu64be: return "customxpu";
+  case {{ xpu }}32le:
+  case {{ xpu }}32be:
+  case {{ xpu }}64le:
+  case {{ xpu }}64be: return "{{ xpu }}";
   }
 }
 
@@ -460,10 +460,10 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("loongarch64", loongarch64)
     .Case("dxil", dxil)
     .Case("xtensa", xtensa)
-    .Case("customxpu32le", customxpu32le)
-    .Case("customxpu32be", customxpu32be)
-    .Case("customxpu64le", customxpu64le)
-    .Case("customxpu64be", customxpu64be)
+    .Case("{{ xpu }}32le", {{ xpu }}32le)
+    .Case("{{ xpu }}32be", {{ xpu }}32be)
+    .Case("{{ xpu }}64le", {{ xpu }}64le)
+    .Case("{{ xpu }}64be", {{ xpu }}64be)
     .Default(UnknownArch);
 }
 
@@ -610,10 +610,10 @@ static Triple::ArchType parseArch(StringRef ArchName) {
                  "dxilv1.4", "dxilv1.5", "dxilv1.6", "dxilv1.7", "dxilv1.8",
                  Triple::dxil)
           .Case("xtensa", Triple::xtensa)
-          .Case("customxpu32le", Triple::customxpu32le)
-          .Case("customxpu32be", Triple::customxpu32be)
-          .Case("customxpu64le", Triple::customxpu64le)
-          .Case("customxpu64be", Triple::customxpu64be)
+          .Case("{{ xpu }}32le", Triple::{{ xpu }}32le)
+          .Case("{{ xpu }}32be", Triple::{{ xpu }}32be)
+          .Case("{{ xpu }}64le", Triple::{{ xpu }}64le)
+          .Case("{{ xpu }}64be", Triple::{{ xpu }}64be)
           .Default(Triple::UnknownArch);
 
   // Some architectures require special parsing logic just to compute the
@@ -945,10 +945,10 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::ve:
   case Triple::xcore:
   case Triple::xtensa:
-  case Triple::customxpu32le:
-  case Triple::customxpu32be:
-  case Triple::customxpu64le:
-  case Triple::customxpu64be:
+  case Triple::{{ xpu }}32le:
+  case Triple::{{ xpu }}32be:
+  case Triple::{{ xpu }}64le:
+  case Triple::{{ xpu }}64be:
     return Triple::ELF;
 
   case Triple::ppc64:
@@ -1639,8 +1639,8 @@ unsigned Triple::getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::x86:
   case llvm::Triple::xcore:
   case llvm::Triple::xtensa:
-  case llvm::Triple::customxpu32le:
-  case llvm::Triple::customxpu32be:
+  case llvm::Triple::{{ xpu }}32le:
+  case llvm::Triple::{{ xpu }}32be:
     return 32;
 
   case llvm::Triple::aarch64:
@@ -1666,8 +1666,8 @@ unsigned Triple::getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::ve:
   case llvm::Triple::wasm64:
   case llvm::Triple::x86_64:
-  case llvm::Triple::customxpu64le:
-  case llvm::Triple::customxpu64be:
+  case llvm::Triple::{{ xpu }}64le:
+  case llvm::Triple::{{ xpu }}64be:
     return 64;
   }
   llvm_unreachable("Invalid architecture value");
@@ -1733,8 +1733,8 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::x86:
   case Triple::xcore:
   case Triple::xtensa:
-  case Triple::customxpu32le:
-  case Triple::customxpu32be:
+  case Triple::{{ xpu }}32le:
+  case Triple::{{ xpu }}32be:
     // Already 32-bit.
     break;
 
@@ -1762,8 +1762,8 @@ Triple Triple::get32BitArchVariant() const {
     break;
   case Triple::wasm64:         T.setArch(Triple::wasm32);  break;
   case Triple::x86_64:         T.setArch(Triple::x86);     break;
-  case Triple::customxpu64le:  T.setArch(Triple::customxpu32le); break;
-  case Triple::customxpu64be:  T.setArch(Triple::customxpu32be); break;
+  case Triple::{{ xpu }}64le:  T.setArch(Triple::{{ xpu }}32le); break;
+  case Triple::{{ xpu }}64be:  T.setArch(Triple::{{ xpu }}32be); break;
   }
   return T;
 }
@@ -1813,8 +1813,8 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::ve:
   case Triple::wasm64:
   case Triple::x86_64:
-  case Triple::customxpu64le:
-  case Triple::customxpu64be:
+  case Triple::{{ xpu }}64le:
+  case Triple::{{ xpu }}64be:
     // Already 64-bit.
     break;
 
@@ -1845,8 +1845,8 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::thumbeb:         T.setArch(Triple::aarch64_be); break;
   case Triple::wasm32:          T.setArch(Triple::wasm64);     break;
   case Triple::x86:             T.setArch(Triple::x86_64);     break;
-  case Triple::customxpu32le:   T.setArch(Triple::customxpu64le); break;
-  case Triple::customxpu32be:   T.setArch(Triple::customxpu64be); break;
+  case Triple::{{ xpu }}32le:   T.setArch(Triple::{{ xpu }}64le); break;
+  case Triple::{{ xpu }}32be:   T.setArch(Triple::{{ xpu }}64be); break;
   }
   return T;
 }
@@ -1891,8 +1891,8 @@ Triple Triple::getBigEndianArchVariant() const {
   case Triple::ve:
   case Triple::csky:
   case Triple::xtensa:
-  case Triple::customxpu32be:
-  case Triple::customxpu64be:
+  case Triple::{{ xpu }}32be:
+  case Triple::{{ xpu }}64be:
 
   // ARM is intentionally unsupported here, changing the architecture would
   // drop any arch suffixes.
@@ -1913,8 +1913,8 @@ Triple Triple::getBigEndianArchVariant() const {
   case Triple::ppc64le: T.setArch(Triple::ppc64);      break;
   case Triple::sparcel: T.setArch(Triple::sparc);      break;
   case Triple::tcele:   T.setArch(Triple::tce);        break;
-  case Triple::customxpu32le: T.setArch(Triple::customxpu32be); break;
-  case Triple::customxpu64le: T.setArch(Triple::customxpu64be); break;
+  case Triple::{{ xpu }}32le: T.setArch(Triple::{{ xpu }}32be); break;
+  case Triple::{{ xpu }}64le: T.setArch(Triple::{{ xpu }}64be); break;
   default:
     llvm_unreachable("getBigEndianArchVariant: unknown triple.");
   }
@@ -1932,8 +1932,8 @@ Triple Triple::getLittleEndianArchVariant() const {
   case Triple::sparcv9:
   case Triple::systemz:
   case Triple::m68k:
-  case Triple::customxpu32le:
-  case Triple::customxpu64le:
+  case Triple::{{ xpu }}32le:
+  case Triple::{{ xpu }}64le:
 
   // ARM is intentionally unsupported here, changing the architecture would
   // drop any arch suffixes.
@@ -1954,8 +1954,8 @@ Triple Triple::getLittleEndianArchVariant() const {
   case Triple::ppc64:      T.setArch(Triple::ppc64le);  break;
   case Triple::sparc:      T.setArch(Triple::sparcel);  break;
   case Triple::tce:        T.setArch(Triple::tcele);    break;
-  case Triple::customxpu32be: T.setArch(Triple::customxpu32le); break;
-  case Triple::customxpu64be: T.setArch(Triple::customxpu64le); break;
+  case Triple::{{ xpu }}32be: T.setArch(Triple::{{ xpu }}32le); break;
+  case Triple::{{ xpu }}64be: T.setArch(Triple::{{ xpu }}64le); break;
   default:
     llvm_unreachable("getLittleEndianArchVariant: unknown triple.");
   }
@@ -2008,8 +2008,8 @@ bool Triple::isLittleEndian() const {
   case Triple::x86_64:
   case Triple::xcore:
   case Triple::xtensa:
-  case Triple::customxpu32le:
-  case Triple::customxpu64le:
+  case Triple::{{ xpu }}32le:
+  case Triple::{{ xpu }}64le:
     return true;
   default:
     return false;

@@ -42,6 +42,12 @@ class InstrILoad(InstrI):
     asm = assembly("$opn $rd, $imm ($rs1)")
 
 
+class InstrIFence(InstrI):
+    prm = parameter("", "pred:ImmU4, succ:ImmU4")
+    asm = assembly("$opn $pred, $succ")
+    bin = binary("$opc[31:28], $pred[3:0], $succ[3:0], $opc[19:0]")
+
+
 class InstrS(Instruction):
     prm = parameter("", "rs2:GPR, rs1:GPR, imm:ImmS12")
     asm = assembly("$opn $rs2, $imm ($rs1)")
