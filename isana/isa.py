@@ -88,7 +88,14 @@ class ISA():
         self.registers = kwargs.pop('registers')
         self.memories = kwargs.pop('memories')
         self.immediates = kwargs.pop('immediates')
-        self.instructions = kwargs.pop('instructions')
+        self.instructions = []
+        self.instruction_aliases = []
+        instructions = kwargs.pop('instructions')
+        for instr in instructions:
+            if isinstance(instr, (InstructionAlias, PseudoInstruction)):
+                self.instruction_aliases.append(instr)
+            else:
+                self.instructions.append(instr)
 
         self._compiler = kwargs.pop('compiler', None)
         if (type(self._compiler) is type(object)):
@@ -739,3 +746,16 @@ def s32(value: int):
 
 def u32(value: int):
     return unsigned(32, value)
+
+
+# ----
+class InstructionAlias():
+    def __init__(self, src, dst):
+        self.src = src
+        self.dst = dst
+
+
+class PseudoInstruction():
+    def __init__(self, src, dsts):
+        self.src = src
+        self.dsts = dsts

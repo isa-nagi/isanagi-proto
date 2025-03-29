@@ -10,6 +10,7 @@ from isana.semantic import (
 )
 from isana.isa import (
     Immediate,
+    InstructionAlias, PseudoInstruction,
 )
 
 
@@ -244,6 +245,45 @@ def get_instr_pattern(instr):
         )
         return s
     return "[]"
+
+
+def get_instr_alias(alias, isa):
+    if isinstance(alias, PseudoInstruction):
+        return None
+    if isinstance(alias, InstructionAlias):
+        srcstr = alias.src
+        dstnode = []
+        alias_ops = re.split(r"\s*,?\s+", alias.dst[0])
+        instr = next(filter(lambda x: x.opn == alias_ops[0], isa.instructions), None)
+        if instr is None:
+            return None
+        instr = instr()
+        instr.isa = isa
+        instr.decode(instr.opc)  # dummy decode as all parameter is 0
+        instr_ops = re.split(r"\s*,?\s+", instr.asm.pattern)
+        dstnode.append(instr.__class__.__name__.upper())
+        alias_ops = [op.strip("()")for op in alias_ops][1:]
+        instr_ops = [op.strip("()")for op in instr_ops][1:]
+        instr_op_labels = [op if op[0] != "$" else op[1:] for op in instr_ops]
+        params = []
+        for prm in list(instr.prm.outputs.keys()) + list(instr.prm.inputs.keys()):
+            if prm not in params:
+                params.append(prm)
+        for i, prm in enumerate(params):
+            idx = instr_op_labels.index(prm)
+            if alias_ops[idx][0] == "$":
+                label = alias_ops[idx][1:]
+                prmobj = isa.get_param_obj(instr_ops[idx][1:], instr)
+                cls = prmobj.label
+                if isinstance(prmobj, Immediate):
+                    if may_change_pc_relative(instr.semantic):
+                        cls = "Br" + cls
+                dstnode.append("{}:${}".format(cls, label))
+            else:
+                dstnode.append(alias_ops[idx].upper())
+        dstnode = "({} {})".format(dstnode[0], ", ".join(dstnode[1:]))
+        s = 'InstAlias<"{}", {}>'.format(srcstr, dstnode)
+        return s
 
 
 class LLVMCompiler():
@@ -643,6 +683,12 @@ class LLVMCompiler():
         fixups_pc_rel = [fx for fx in fixups if fx.name[:6] == "pc_rel"]
         fixup_relocs = [fx for fx in fixups if not isinstance(fx.bin, int)]
 
+        instr_aliases = []
+        for alias in self.isa.instruction_aliases:
+            instr_alias = get_instr_alias(alias, self.isa)
+            if instr_alias:
+                instr_aliases.append(instr_alias)
+
         kwargs = {
             "asm_operand_clss": asm_operand_clss,
             "operand_clss": operand_clss,
@@ -663,6 +709,8 @@ class LLVMCompiler():
 
             "fixups_pc_rel": fixups_pc_rel,
             "fixup_relocs": fixup_relocs,
+
+            "instr_aliases": instr_aliases,
         }
         return kwargs
 

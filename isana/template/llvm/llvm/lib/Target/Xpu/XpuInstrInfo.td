@@ -289,3 +289,8 @@ def PseudoCALLIndirect : {{ Xpu }}Inst<(outs), (ins GPR:$rs1),
   let isCall = 1;
   let Defs = [X1];
 }
+
+//=== Instruction Alias
+{% for instr_alias in instr_aliases -%}
+def : {{ instr_alias }};
+{% endfor %}

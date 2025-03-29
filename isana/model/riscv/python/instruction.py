@@ -22,6 +22,7 @@ from .instructionB import instructionsZba
 from .instructionB import instructionsZbb
 from .instructionB import instructionsZbc
 from .instructionB import instructionsZbs
+from .instructionAlias import instruction_aliases
 
 
 class unknown32op(Instruction):
@@ -91,3 +92,6 @@ if True:
 #     instructions += [unknown16op00]
 #     instructions += [unknown16op01]
 #     instructions += [unknown16op10]
+
+if True:
+    instructions += instruction_aliases
