@@ -2,7 +2,7 @@ import argparse
 import sys
 from okojo.elf import ElfObject
 from okojo.disasm import DisassemblyObject
-from isana.model.riscv.python.isa import isa
+from isana.isa import load_isa
 
 
 def print_dis(dis, file=None):
@@ -27,11 +27,12 @@ def print_dis(dis, file=None):
 
 def main():
     argparser = argparse.ArgumentParser()
-    argparser.add_argument('--toolchain', default=None, type=str)
-    argparser.add_argument('--machine', default=None, type=str)
+    argparser.add_argument('--isa-dir', default=".", type=str)
     argparser.add_argument('elf')
     args = argparser.parse_args()
     elfpath = args.elf
+
+    isa = load_isa(args.isa_dir)
 
     elf = ElfObject(elfpath)
     elf.read_all()

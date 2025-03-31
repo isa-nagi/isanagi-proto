@@ -1,5 +1,8 @@
 import copy
+import importlib.util
+import os
 import re
+import sys
 
 
 class Bits():
@@ -759,3 +762,21 @@ class PseudoInstruction():
     def __init__(self, src, dsts):
         self.src = src
         self.dsts = dsts
+
+
+# ----
+def load_isa(isa_dir):
+    try:
+        isa_dir = isa_dir.rstrip(os.sep)
+        isa_dir_basename = os.path.basename(isa_dir)
+        isa_fpath = os.path.join(isa_dir, "isa.py")
+        parent_dir = os.path.abspath(os.path.dirname(isa_dir))
+        module_name = f"{isa_dir_basename}.isa"
+        sys.path.append(parent_dir)
+        spec = importlib.util.spec_from_file_location(module_name, isa_fpath)
+        isa = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = isa
+        spec.loader.exec_module(isa)
+    except Exception:
+        raise Exception("ISA model load failure")
+    return isa.isa

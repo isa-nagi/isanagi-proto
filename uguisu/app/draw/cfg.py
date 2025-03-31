@@ -3,7 +3,7 @@ import os
 import re
 from okojo.elf import ElfObject
 from okojo.disasm import DisassemblyObject
-from isana.model.riscv.python.isa import isa
+from isana.isa import load_isa
 from uguisu.graph import TextNode, Edge, Graph
 
 
@@ -27,14 +27,15 @@ def build_cfg(func):
 
 def main():
     argparser = argparse.ArgumentParser()
-    argparser.add_argument('--toolchain', default=None, type=str)
-    argparser.add_argument('--machine', default=None, type=str)
+    argparser.add_argument('--isa-dir', default=".", type=str)
     argparser.add_argument('--vertical', default=False, action='store_true')
     argparser.add_argument('--max-depth', '-d', default=20, type=int)
     argparser.add_argument('--func', '-f', default=None)
     argparser.add_argument('elf')
     args = argparser.parse_args()
     elfpath = args.elf
+
+    isa = load_isa(args.isa_dir)
 
     elf = ElfObject(elfpath)
     elf.read_all()
