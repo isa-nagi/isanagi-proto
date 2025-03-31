@@ -1,21 +1,41 @@
 # isanagi
 
-XPU Design Tool
+XPU 設計ツール
 
-This repository is experimental.
+※このリポジトリはツールの設計を考えたり実験的な実装を試すためのものです。
+
+
+## Sub Projects
 
 - **isana**
 
-  ISA descriptor and SDK/HDK generator
+  * ISA定義
+  * SDK/HDK生成
 
 - **okojo**
 
-  ELF/DWARF tools
+  * ELF/DWARF編集ツール
+  * 多機能ディスアセンブラ
 
 - **uguisu**
 
-  Visualization tools
+  * 可視化ツール
+  * GUIフロントエンド
 
 - **kanavn**
 
-  Testing framework
+  * テスト・フレームワーク
+
+
+## Install
+
+```
+pip install git+https://github.com/isa-nagi/isanagi-proto.git
+```
+
+
+## Tools
+
+- isana-build
+- okojo-disassembler
+- uguisu-draw
