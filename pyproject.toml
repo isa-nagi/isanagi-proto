@@ -18,9 +18,7 @@ meson = "^1.7.0"
 [tool.poetry.scripts]
 isana-build = "isana.app.build.main:main"
 okojo-disassembler = "okojo.app.disassembler:main"
-uguisu-callgraph = "uguisu.app.draw.callgraph:main"
-uguisu-cfg = "uguisu.app.draw.cfg:main"
-uguisu-dfg = "uguisu.app.draw.dfg:main"
+uguisu-draw = "uguisu.app.draw.main:main"
 
 [build-system]
 requires = ["poetry-core"]

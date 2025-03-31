@@ -1,8 +1,15 @@
-import argparse
 from okojo.elf import ElfObject
 from okojo.disasm import DisassemblyObject
 from isana.isa import load_isa
 from uguisu.graph import TextNode, Edge, Graph
+
+
+def add_args(subparsers):
+    parser = subparsers.add_parser('callgraph')
+    parser.add_argument('--isa-dir', default=".", type=str)
+    parser.add_argument('--vertical', default=False, action='store_true')
+    parser.add_argument('--max-depth', '-d', default=20, type=int)
+    parser.add_argument('elf')
 
 
 def build_callgraph(dis):
@@ -152,13 +159,7 @@ def write_callgraph_info(info, file):
             ' '.join([r.label for r in regs['children']['caller']])), file=file)
 
 
-def main():
-    argparser = argparse.ArgumentParser()
-    argparser.add_argument('--isa-dir', default=".", type=str)
-    argparser.add_argument('--vertical', default=False, action='store_true')
-    argparser.add_argument('--max-depth', '-d', default=20, type=int)
-    argparser.add_argument('elf')
-    args = argparser.parse_args()
+def main(args):
     elfpath = args.elf
 
     isa = load_isa(args.isa_dir)
@@ -178,7 +179,3 @@ def main():
     fname = elfpath + ".callgraph.txt"
     with open(fname, "w") as f:
         write_callgraph_info(info, file=f)
-
-
-if __name__ == '__main__':
-    main()
