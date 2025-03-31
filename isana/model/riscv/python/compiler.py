@@ -8,8 +8,8 @@ fixups = [
 
 
 class RiscvCompiler(LLVMCompiler):
-    namespace = "RiscvXpu"
-    triplet = ("riscvxpu32", "unknown", "elf")
+    target = "RiscvXpu"
+    triple = "riscvxpu32le-unknown-elf"
 
     def __init__(self, isa, **kwargs):
         super().__init__(isa, **kwargs)

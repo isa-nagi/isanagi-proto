@@ -2,9 +2,11 @@
 
 XPU Design Tool
 
+This repository is experimental.
+
 - **isana**
 
-  ISA descriptor
+  ISA descriptor and SDK/HDK generator
 
 - **okojo**
 
@@ -12,4 +14,8 @@ XPU Design Tool
 
 - **uguisu**
 
-  Visualization library
+  Visualization tools
+
+- **kanavn**
+
+  Testing framework

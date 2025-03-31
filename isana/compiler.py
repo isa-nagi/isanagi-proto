@@ -1,5 +1,6 @@
 import os
 import re
+import glob
 from jinja2 import Template
 from isana.semantic import (
     may_change_pc_absolute,
@@ -14,8 +15,8 @@ from isana.isa import (
 )
 
 
-_default_namespace = "Xpu"
-_default_triple = ("xpu", "", "")
+_default_target = "Xpu"
+_default_triple = "xpu-unknown-elf"
 
 
 class KwargsClass():
@@ -123,7 +124,7 @@ instr_attr_table = {
 
 class Fixup(KwargsClass):
     keys = (
-        'namespace',
+        'target',
         'number',
         'name_enum',
         'addend',
@@ -135,12 +136,12 @@ class Fixup(KwargsClass):
     )
 
     def __init__(self, **kwargs):
-        self.namespace = kwargs.pop('namespace', _default_namespace)
+        self.target = kwargs.pop('target', _default_target)
         self.number = kwargs.pop('number', -1)
         self.name = kwargs.pop('name', str())
         self.addend = kwargs.pop('addend', None)
         self.bin = kwargs.pop('bin', None)
-        self.name_enum = f"fixup_{self.namespace.lower()}_{self.name}"
+        self.name_enum = f"fixup_{self.target.lower()}_{self.name}"
         self.reloc_procs = list()
         super().__init__(**kwargs)
 
@@ -287,7 +288,7 @@ def get_instr_alias(alias, isa):
 
 
 class LLVMCompiler():
-    namespace = _default_namespace
+    target = _default_target
     triple = tuple(_default_triple)
     fixups = tuple()
 
@@ -297,13 +298,17 @@ class LLVMCompiler():
         self._prepare_processorinfo()
 
     @property
+    def namespace(self):
+        return self.target
+
+    @property
     def template_dir(self):
-        return os.path.join(os.path.dirname(__file__), "template", "llvm")
+        return os.path.join(os.path.dirname(__file__), "template")
 
     def _read_template_and_write(self, fpath):
         fdirs, fname = os.path.split(fpath)
         fdirs = fdirs.split("/")
-        template_fdir = os.path.join(self.template_dir, *[d.format(Xpu="Xpu") for d in fdirs])
+        template_fdir = os.path.join(self.template_dir, "llvm", *[d.format(Xpu="Xpu") for d in fdirs])
         template_fname = fname.format(Xpu="Xpu")
         template_fpath = os.path.join(template_fdir, template_fname)
         with open(template_fpath) as f:
@@ -735,6 +740,9 @@ class LLVMCompiler():
     def gen_llvm_lld_srcs(self):
         fpaths = (
             "lld/ELF/Arch/{Xpu}.cpp",
+            "lld/ELF/CMakeLists.txt",
+            "lld/ELF/Target.cpp",
+            "lld/ELF/Target.h",
         )
         for fpath in fpaths:
             self._read_template_and_write(fpath)
@@ -798,3 +806,37 @@ class LLVMCompiler():
         )
         for fpath in fpaths:
             self._read_template_and_write(fpath)
+
+    def gen_picolibc_srcs(self):
+        pwd = os.getcwd()
+        os.chdir(os.path.join(self.template_dir, "picolibc"))
+        files = glob.glob("**/*", recursive=True)
+        files = [f for f in files if os.path.isfile(f)]
+        os.chdir(pwd)
+
+        for fpath in files:
+            fdirs, fname = os.path.split(fpath)
+            fdirs = fdirs.split("/")
+            template_fdir = os.path.join(self.template_dir, "picolibc", *fdirs)
+            template_fname = fname
+            template_fpath = os.path.join(template_fdir, template_fname)
+            with open(template_fpath) as f:
+                template_str = f.read()
+            # final_text = template_str
+            tmp_kwargs = dict(self.kwargs)
+            tmp_kwargs.update({
+                'Xpu': self.namespace,
+                'XPU': self.namespace.upper(),
+                'xpu': self.namespace.lower(),
+                'target_triple': self.triple,
+            })
+            final_text = Template(source=template_str).render(
+                **tmp_kwargs,
+            )
+
+            out_fdir = os.path.join(self.outdir, *[d.replace("xpu", self.target.lower()) for d in fdirs])
+            out_fname = fname.replace("xpu", self.target.lower())
+            out_fpath = os.path.join(out_fdir, out_fname)
+            os.makedirs(out_fdir, exist_ok=True)
+            with open(out_fpath, "w") as f:
+                f.write(final_text)

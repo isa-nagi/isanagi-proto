@@ -13,8 +13,10 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.10"
 jinja2 = "^3.1.4"
+meson = "^1.7.0"
 
 [tool.poetry.scripts]
+isana-build = "isana.app.build.main:main"
 okojo-disassembler = "okojo.app.disassembler:main"
 uguisu-callgraph = "uguisu.app.callgraph:main"
 uguisu-cfg = "uguisu.app.draw.cfg:main"
