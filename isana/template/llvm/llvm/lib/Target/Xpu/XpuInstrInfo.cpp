@@ -149,3 +149,226 @@ void
       .addImm(0)
       .addMemOperand(MMO);
 }
+
+unsigned
+{{ Xpu }}InstrInfo::getInstSizeInBytes(
+  const MachineInstr &MI
+) const {
+  if (MI.isMetaInstruction())
+    return 0;
+
+  switch (MI.getOpcode()) {
+  default:
+    return MI.getDesc().getSize();
+  // case {{ Xpu }}::CONSTPOOL_ENTRY:
+  //   return MI.getOperand(2).getImm();
+  // case {{ Xpu }}::SPILL_CARRY:
+  // case {{ Xpu }}::RESTORE_CARRY:
+  // case {{ Xpu }}::PseudoTLSLA32:
+  //   return 8;
+  case TargetOpcode::INLINEASM_BR:
+  case TargetOpcode::INLINEASM: {
+    const MachineFunction *MF = MI.getParent()->getParent();
+    const char *AsmStr = MI.getOperand(0).getSymbolName();
+    return getInlineAsmLength(AsmStr, *MF->getTarget().getMCAsmInfo());
+  }
+  }
+}
+
+static void parseCondBranch(MachineInstr &LastInst, MachineBasicBlock *&Target,
+                            SmallVectorImpl<MachineOperand> &Cond) {
+  // Block ends with fall-through condbranch.
+  assert(LastInst.getDesc().isConditionalBranch() &&
+         "Unknown conditional branch");
+  Target = LastInst.getOperand(2).getMBB();
+  Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
+  Cond.push_back(LastInst.getOperand(0));
+  Cond.push_back(LastInst.getOperand(1));
+}
+
+bool
+{{ Xpu }}InstrInfo::analyzeBranch(
+  MachineBasicBlock &MBB,
+  MachineBasicBlock *&TBB,
+  MachineBasicBlock *&FBB,
+  SmallVectorImpl<MachineOperand> &Cond,
+  bool AllowModify
+) const {
+  TBB = FBB = nullptr;
+  Cond.clear();
+
+  // If the block has no terminators, it just falls into the block after it.
+  MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
+  if (I == MBB.end() || !isUnpredicatedTerminator(*I))
+    return false;
+
+  // Count the number of terminators and find the first unconditional or
+  // indirect branch.
+  MachineBasicBlock::iterator FirstUncondOrIndirectBr = MBB.end();
+  int NumTerminators = 0;
+  for (auto J = I.getReverse(); J != MBB.rend() && isUnpredicatedTerminator(*J);
+       J++) {
+    NumTerminators++;
+    if (J->getDesc().isUnconditionalBranch() ||
+        J->getDesc().isIndirectBranch()) {
+      FirstUncondOrIndirectBr = J.getReverse();
+    }
+  }
+
+  // If AllowModify is true, we can erase any terminators after
+  // FirstUncondOrIndirectBR.
+  if (AllowModify && FirstUncondOrIndirectBr != MBB.end()) {
+    while (std::next(FirstUncondOrIndirectBr) != MBB.end()) {
+      std::next(FirstUncondOrIndirectBr)->eraseFromParent();
+      NumTerminators--;
+    }
+    I = FirstUncondOrIndirectBr;
+  }
+
+  // We can't handle blocks that end in an indirect branch.
+  if (I->getDesc().isIndirectBranch())
+    return true;
+
+  // We can't handle Generic branch opcodes from Global ISel.
+  if (I->isPreISelOpcode())
+    return true;
+
+  // We can't handle blocks with more than 2 terminators.
+  if (NumTerminators > 2)
+    return true;
+
+  // Handle a single unconditional branch.
+  if (NumTerminators == 1 && I->getDesc().isUnconditionalBranch()) {
+    TBB = getBranchDestBlock(*I);
+    return false;
+  }
+
+  // Handle a single conditional branch.
+  if (NumTerminators == 1 && I->getDesc().isConditionalBranch()) {
+    parseCondBranch(*I, TBB, Cond);
+    return false;
+  }
+
+  // Handle a conditional branch followed by an unconditional branch.
+  if (NumTerminators == 2 && std::prev(I)->getDesc().isConditionalBranch() &&
+      I->getDesc().isUnconditionalBranch()) {
+    parseCondBranch(*std::prev(I), TBB, Cond);
+    FBB = getBranchDestBlock(*I);
+    return false;
+  }
+
+  // Otherwise, we can't handle this.
+  return true;
+}
+
+// Inserts a branch into the end of the specific MachineBasicBlock, returning
+// the number of instructions inserted.
+unsigned
+{{ Xpu }}InstrInfo::insertBranch(
+  MachineBasicBlock &MBB,
+  MachineBasicBlock *TBB,
+  MachineBasicBlock *FBB,
+  ArrayRef<MachineOperand> Cond,
+  const DebugLoc &DL,
+  int *BytesAdded
+) const {
+  if (BytesAdded)
+    *BytesAdded = 0;
+
+  // Shouldn't be a fall through.
+  assert(TBB && "insertBranch must not be told to insert a fallthrough");
+  assert((Cond.size() == 3 || Cond.size() == 0) &&
+         "{{ Xpu }} branch conditions have two components!");
+
+  // Unconditional branch.
+  if (Cond.empty()) {
+    MachineInstr &MI = *BuildMI(&MBB, DL, get({{ Xpu }}::PseudoBR)).addMBB(TBB);
+    if (BytesAdded)
+      *BytesAdded += getInstSizeInBytes(MI);
+    return 1;
+  }
+
+  // Either a one or two-way conditional branch.
+  unsigned Opc = Cond[0].getImm();
+  MachineInstr &CondMI = *BuildMI(&MBB, DL, get(Opc))
+                                  .add(Cond[1])
+                                  .add(Cond[2])
+                                  .addMBB(TBB);
+  if (BytesAdded)
+    *BytesAdded += getInstSizeInBytes(CondMI);
+
+  // One-way conditional branch.
+  if (!FBB)
+    return 1;
+
+  // Two-way conditional branch.
+  MachineInstr &MI = *BuildMI(&MBB, DL, get({{ Xpu }}::PseudoBR)).addMBB(FBB);
+  if (BytesAdded)
+    *BytesAdded += getInstSizeInBytes(MI);
+  return 2;
+}
+
+unsigned
+{{ Xpu }}InstrInfo::removeBranch(
+  MachineBasicBlock &MBB,
+  int *BytesRemoved
+) const {
+  if (BytesRemoved)
+    *BytesRemoved = 0;
+  MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
+  if (I == MBB.end())
+    return 0;
+
+  if (!I->getDesc().isUnconditionalBranch() &&
+      !I->getDesc().isConditionalBranch())
+    return 0;
+
+  // Remove the branch.
+  if (BytesRemoved)
+    *BytesRemoved += getInstSizeInBytes(*I);
+  I->eraseFromParent();
+
+  I = MBB.end();
+
+  if (I == MBB.begin())
+    return 1;
+  --I;
+  if (!I->getDesc().isConditionalBranch())
+    return 1;
+
+  // Remove the branch.
+  if (BytesRemoved)
+    *BytesRemoved += getInstSizeInBytes(*I);
+  I->eraseFromParent();
+  return 2;
+}
+
+static unsigned getOppositeBranchOpc(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    llvm_unreachable("Unknown conditional branch!");
+  case {{ Xpu }}::BEQ: return {{ Xpu }}::BNE;
+  case {{ Xpu }}::BNE: return {{ Xpu }}::BEQ;
+  case {{ Xpu }}::BLT: return {{ Xpu }}::BGE;
+  case {{ Xpu }}::BGE: return {{ Xpu }}::BLT;
+  case {{ Xpu }}::BLTU: return {{ Xpu }}::BGEU;
+  case {{ Xpu }}::BGEU: return {{ Xpu }}::BLTU;
+  }
+}
+
+bool
+{{ Xpu }}InstrInfo::reverseBranchCondition(
+  SmallVectorImpl<MachineOperand> &Cond
+) const {
+  assert((Cond.size() == 3) && "Invalid branch condition!");
+  Cond[0].setImm(getOppositeBranchOpc(Cond[0].getImm()));
+  return false;
+}
+
+MachineBasicBlock *
+{{ Xpu }}InstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
+  assert(MI.getDesc().isBranch() && "Unexpected opcode!");
+  // The branch target is always the last operand.
+  int NumOp = MI.getNumExplicitOperands();
+  return MI.getOperand(NumOp - 1).getMBB();
+}
