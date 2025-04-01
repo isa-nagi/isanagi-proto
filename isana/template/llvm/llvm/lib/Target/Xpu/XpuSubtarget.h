@@ -25,7 +25,7 @@ class {{ Xpu }}Subtarget : public {{ Xpu }}GenSubtargetInfo {
   {{ Xpu }}InstrInfo InstrInfo;
   {{ Xpu }}RegisterInfo RegInfo;
   {{ Xpu }}TargetLowering TLInfo;
-  // {{ Xpu }}SelectionDAGInfo TSInfo;
+  SelectionDAGTargetInfo TSInfo;  // {{ Xpu }}SelectionDAGInfo TSInfo;
 
 protected:
   bool Has64Bit;
@@ -51,8 +51,9 @@ public:
     return &TLInfo;
   }
   // const {{ Xpu }}SelectionDAGInfo *getSelectionDAGInfo() const override {
-  //   return &TSInfo;
-  // }
+  const SelectionDAGTargetInfo *getSelectionDAGInfo() const override {
+    return &TSInfo;
+  }
   const {{ Xpu }}RegisterInfo *getRegisterInfo() const override {
     return &RegInfo;
   }

@@ -24,7 +24,7 @@ endian = 'little'
 c_args = ['-D__IEEE_LITTLE_ENDIAN', '-D__riscv_xlen=32', '-D__riscv_float_abi_soft',
           '-fno-optimize-sibling-calls',
           '-fno-jump-tables',
-          '-O0',
+          # '-O1',
           ]
 c_link_args = []
 cpp_link_args = []
