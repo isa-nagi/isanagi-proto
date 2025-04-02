@@ -72,6 +72,28 @@ def build_sdk(args, isa=None):
     build_sdk_compiler_rt(args, isa)
     build_sdk_picolibc(args, isa)
 
+def copy_template_only_diff_files(files, srcdir, dstdir):
+    for file in files:
+        src_file = os.path.join(srcdir, file)
+        src_hash = None
+        with open(src_file) as f:
+            src_hash = hashlib.md5()
+            src_hash.update(f.read().encode())
+            src_hash = src_hash.hexdigest()
+
+        dst_file = os.path.join(dstdir, file)
+        dst_hash = None
+        if os.path.exists(dst_file):
+            with open(dst_file) as f:
+                dst_hash = hashlib.md5()
+                dst_hash.update(f.read().encode())
+                dst_hash = dst_hash.hexdigest()
+
+        if dst_hash is None or src_hash != dst_hash:
+            dst_dir, dst_fname = os.path.split(dst_file)
+            os.makedirs(dst_dir, exist_ok=True)
+            shutil.copy2(src_file, dst_file)
+
 
 def expand_llvm_template(args, isa):
     print("# Expanding compiler templates")
@@ -88,26 +110,25 @@ def expand_llvm_template(args, isa):
     os.chdir(pwd)
 
     # copy only different file
-    for file in files:
-        src_file = os.path.join(llvmcc.outdir, file)
-        src_hash = None
-        with open(src_file) as f:
-            src_hash = hashlib.md5()
-            src_hash.update(f.read().encode())
-            src_hash = src_hash.hexdigest()
+    copy_template_only_diff_files(files, llvmcc.outdir, args.llvm_project_dir)
 
-        dst_file = os.path.join(args.llvm_project_dir, file)
-        dst_hash = None
-        if os.path.exists(dst_file):
-            with open(dst_file) as f:
-                dst_hash = hashlib.md5()
-                dst_hash.update(f.read().encode())
-                dst_hash = dst_hash.hexdigest()
 
-        if dst_hash is None or src_hash != dst_hash:
-            dst_dir, dst_fname = os.path.split(dst_file)
-            os.makedirs(dst_dir, exist_ok=True)
-            shutil.copy2(src_file, dst_file)
+def expand_compiler_rt_template(args, isa):
+    print("# Expanding compiler-rt templates")
+
+    llvmcc = isa.compiler
+    llvmcc.outdir = os.path.join(args.work_dir, "build-compiler-rt-template")
+    llvmcc.gen_compiler_rt_srcs()
+
+    pwd = os.getcwd()
+    os.chdir(llvmcc.outdir)
+    files = glob.glob("**/*", recursive=True)
+    files = [f for f in files if os.path.isfile(f)]
+    files.sort()
+    os.chdir(pwd)
+
+    # copy only different file
+    copy_template_only_diff_files(files, llvmcc.outdir, args.llvm_project_dir)
 
 
 def expand_picolibc_template(args, isa):
@@ -125,26 +146,7 @@ def expand_picolibc_template(args, isa):
     os.chdir(pwd)
 
     # copy only different file
-    for file in files:
-        src_file = os.path.join(llvmcc.outdir, file)
-        src_hash = None
-        with open(src_file) as f:
-            src_hash = hashlib.md5()
-            src_hash.update(f.read().encode())
-            src_hash = src_hash.hexdigest()
-
-        dst_file = os.path.join(args.picolibc_dir, file)
-        dst_hash = None
-        if os.path.exists(dst_file):
-            with open(dst_file) as f:
-                dst_hash = hashlib.md5()
-                dst_hash.update(f.read().encode())
-                dst_hash = dst_hash.hexdigest()
-
-        if dst_hash is None or src_hash != dst_hash:
-            dst_dir, dst_fname = os.path.split(dst_file)
-            os.makedirs(dst_dir, exist_ok=True)
-            shutil.copy2(src_file, dst_file)
+    copy_template_only_diff_files(files, llvmcc.outdir, args.picolibc_dir)
 
 
 def build_sdk_compiler(args, isa=None):
@@ -196,6 +198,8 @@ def build_sdk_compiler_rt(args, isa=None):
     if isa is None:
         isa = load_isa(args.isa_dir)
 
+    expand_compiler_rt_template(args, isa)
+
     llvm_install_prefix = os.path.join(os.path.abspath(args.install_prefix), "sdk")
     def toolchain_path(name):
         return os.path.join(llvm_install_prefix, "bin", name)
@@ -209,8 +213,8 @@ def build_sdk_compiler_rt(args, isa=None):
         "-G", "{}".format(args.generator),
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INSTALL_PREFIX={}".format(rt_install_prefix),
-        "-DCMAKE_C_COCMPILER_TARGET={}".format(isa.compiler.triple),
-        "-DCMAKE_ASM_COCMPILER_TARGET={}".format(isa.compiler.triple),
+        "-DCMAKE_C_COMPILER_TARGET={}".format(isa.compiler.triple),
+        "-DCMAKE_ASM_COMPILER_TARGET={}".format(isa.compiler.triple),
         "-DCMAKE_C_COMPILER_FORCED=ON",
         "-DCMAKE_CXX_COMPILER_FORCED=ON",
         "-DCMAKE_CXX_COMPILER={}".format(toolchain_path("clang++")),
@@ -220,7 +224,10 @@ def build_sdk_compiler_rt(args, isa=None):
         "-DCMAKE_RANLIB={}".format(toolchain_path("llvm-ranlib")),
         "-DLLVM_CONFIG_PATH={}".format(toolchain_path("llvm-config")),
 
-        "-DCMAKE_C_FLAGS=-fno-optimize-sibling-calls -fno-jump-tables -O0",
+        "-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON",
+        # "-DLLVM_TARGETS_TO_BUILD={}32LE".format(isa.compiler.target),
+
+        "-DCMAKE_C_FLAGS=-fno-optimize-sibling-calls -fno-jump-tables -Oz",
         "-DCMAKE_ASM_FLAGS=",
 
         "-DCOMPILER_RT_BUILD_BUILTINS=ON",

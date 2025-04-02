@@ -807,6 +807,41 @@ class LLVMCompiler():
         for fpath in fpaths:
             self._read_template_and_write(fpath)
 
+    def gen_compiler_rt_srcs(self):
+        pwd = os.getcwd()
+        os.chdir(os.path.join(self.template_dir, "llvm"))
+        files = glob.glob("compiler-rt/**/*", recursive=True)
+        files = [f for f in files if os.path.isfile(f)]
+        os.chdir(pwd)
+
+        for fpath in files:
+            fdirs, fname = os.path.split(fpath)
+            fdirs = fdirs.split("/")
+            template_fdir = os.path.join(self.template_dir, "llvm", *fdirs)
+            template_fname = fname
+            template_fpath = os.path.join(template_fdir, template_fname)
+            with open(template_fpath) as f:
+                template_str = f.read()
+            # final_text = template_str
+            tmp_kwargs = dict(self.kwargs)
+            tmp_kwargs.update({
+                'Xpu': self.namespace,
+                'XPU': self.namespace.upper(),
+                'xpu': self.namespace.lower(),
+                'target_triple': self.triple,
+            })
+            final_text = Template(source=template_str).render(
+                **tmp_kwargs,
+            )
+
+            out_fdir = os.path.join(self.outdir, *[d.replace("xpu", self.target.lower()) for d in fdirs])
+            out_fname = fname.replace("xpu", self.target.lower())
+            out_fpath = os.path.join(out_fdir, out_fname)
+            print(out_fpath)
+            os.makedirs(out_fdir, exist_ok=True)
+            with open(out_fpath, "w") as f:
+                f.write(final_text)
+
     def gen_picolibc_srcs(self):
         pwd = os.getcwd()
         os.chdir(os.path.join(self.template_dir, "picolibc"))
