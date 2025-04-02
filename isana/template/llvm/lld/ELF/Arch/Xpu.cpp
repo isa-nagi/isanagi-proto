@@ -40,6 +40,14 @@ RelExpr {{ Xpu }}::getRelExpr(RelType type, const Symbol &s,
 
 void {{ Xpu }}::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
   switch (rel.type) {
+  case R_{{ XPU }}_32: {
+    write32le(loc, val);
+    return;
+  }
+  case R_{{ XPU }}_64: {
+    write64le(loc, val);
+    return;
+  }
   {% for fx in fixup_relocs -%}
   case R_{{ XPU }}_{{ fx.name.upper() }}: {
     uint32_t newval = read{{ fx.size }}le(loc)
