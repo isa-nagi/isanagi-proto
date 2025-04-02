@@ -36,6 +36,6 @@ pip install git+https://github.com/isa-nagi/isanagi-proto.git
 
 ## Tools
 
-- isana-build
+- [isana-build](doc/isana-build.md)
 - okojo-disassembler
 - uguisu-draw
