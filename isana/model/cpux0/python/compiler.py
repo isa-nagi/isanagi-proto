@@ -6,9 +6,9 @@ class rel32(Fixup):
     name = "rel32"
 
 
-class TinyCpuCompiler(LLVMCompiler):
-    namespace = "CustomXPU"
-    triple = ("customxpu", "", "")
+class CpuX0Compiler(LLVMCompiler):
+    namespace = "CpuX0"
+    triple = ("cpux0", "", "")
 
     fixups = (
         # rel32,
@@ -18,4 +18,4 @@ class TinyCpuCompiler(LLVMCompiler):
         super().__init__(isa)
 
 
-compiler = TinyCpuCompiler
+compiler = CpuX0Compiler

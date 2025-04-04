@@ -2,14 +2,14 @@ from isana.isa import ISA
 from isana.isa import Context
 
 from .memory import Mem
-from .register import GPR, PCR
-from .datatype import Imm
+from .register import GPR, SR, C0R, SPR
+from .datatype import Imm, ImmS12, ImmS16, ImmS16O16, ImmS24
 from .instruction import instructions
 
 from .compiler import compiler
 
 
-class TinyCpuContext(Context):
+class CpuX0Context(Context):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -21,46 +21,34 @@ class TinyCpuContext(Context):
             ins.is_jump, ins.is_branch, ins.is_call, ins.is_tail, ins.is_return
         ])
         if not is_jump:
-            self.PC.pc = self.PC.pc + 4
+            self.C0R.pc = self.C0R.pc + 4
 
 
-class TinyCpuISA(ISA):
+class CpuX0ISA(ISA):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
 
-isa_le = TinyCpuISA(
-    name="tinycpu",
+isa = CpuX0ISA(
+    name="cpux0",
     endian="little",
     registers=(
         GPR,
-        PCR,
+        SR,
+        C0R,
+        SPR,
     ),
     memories=(
         Mem,
     ),
     immediates=(
         Imm,
+        ImmS12,
+        ImmS16,
+        ImmS16O16,
+        ImmS24,
     ),
     instructions=instructions,
     compiler=compiler,
-    context=TinyCpuContext,
-)
-
-isa_be = TinyCpuISA(
-    name="tinycpu",
-    endian="big",
-    registers=(
-        GPR,
-        PCR,
-    ),
-    memories=(
-        Mem,
-    ),
-    immediates=(
-        Imm,
-    ),
-    instructions=instructions,
-    compiler=compiler,
-    context=TinyCpuContext,
+    context=CpuX0Context,
 )

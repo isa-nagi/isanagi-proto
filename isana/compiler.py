@@ -487,13 +487,13 @@ class LLVMCompiler():
             instr.isa = self.isa
             instr.decode(instr.opc)  # dummy decode as all parameter is 0
             instr_def = InstrDefs()
-            if may_change_pc_relative(instr.semantic):
-                # for label, cls in instr.prm.inputs.items():
-                #     if label == "imm":
-                #         break
-                # else:
-                #     continue
-                param_obj = self.isa.get_param_obj("imm", instr)
+            if m := may_change_pc_relative(instr.semantic):
+                imm_key = m
+                if imm_key.startswith("ins."):
+                    imm_key = imm_key[4:]
+                else:
+                    continue
+                param_obj = self.isa.get_param_obj(imm_key, instr)
                 if not isinstance(param_obj, Immediate):
                     continue
                 cls = param_obj

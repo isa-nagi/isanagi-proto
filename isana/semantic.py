@@ -19,6 +19,8 @@ op_alu_table = {
 
 
 op_aluu_table = {
+    ast.Add: "add",
+    ast.Sub: "sub",
     ast.FloorDiv: "udiv",
     ast.Mod: "urem",
     ast.RShift: "srl",
@@ -50,6 +52,26 @@ class AstMatchObject():
     def __init__(self):
         self.picks = []
 
+    def __repr__(self):
+        s = "{}(picks={})".format(
+            self.__class__.__name__,
+            str([get_ast_name(a) for a in self.picks]),
+        )
+        return s
+
+
+def get_ast_name(obj):
+    if type(obj) is ast.Name:
+        return obj.id
+    if type(obj) is ast.Attribute:
+        # return "{}.{}".format(obj.value.id, obj.attr)
+        return obj.attr
+    if type(obj) is ast.Subscript:
+        # return "{}[{}]".format(get_ast_name(obj.value), get_ast_name(obj.slice))
+        return get_ast_name(obj.slice)
+    if type(obj) in (ast.Pow, ast.NotEq):
+        return obj.__class__.__name__
+    return "UnknownAst:" + obj.__class__.__name__
 
 def _strip_expr(semantic):
     code = inspect.getsource(semantic)
@@ -131,6 +153,7 @@ def _match_ast_line(src_ites, dst_ites):
             if dstv.id == "PickAny":
                 continue
         if type(dstv) is ast.Attribute and dstv.attr in ["Pick", "PickAny"]:
+            # Note: Nn Attribute, the right side of "." is the parent.
             mobj.picks.append(srcv)
             need_comp = False
         if type(dstv) in (ast.Pow, ast.NotEq):
@@ -166,21 +189,22 @@ def may_change_pc_absolute(semantic):
         mng1 = _match_ast(rhs, pcabs_ng1_semantic)
         mng2 = _match_ast(rhs, pcabs_ng2_semantic)
         if not (mng1 or mng2):
-            return True
-    return False
+            return m
+    return None
 
 
 def may_change_pc_relative(semantic):
     def pcrel1_semantic(self, ctx, ins):
-        ctx.PCR.pc = ctx.PCR.pc + Any
+        ctx.PCR.pc = ctx.PCR.pc + PickAny
     def pcrel2_semantic(self, ctx, ins):
-        ctx.PCR.pc += Any
+        ctx.PCR.pc += PickAny
 
-    if _search_ast(semantic, pcrel1_semantic):
-        return True
-    if _search_ast(semantic, pcrel2_semantic):
-        return True
-    return False
+    if m := _search_ast(semantic, pcrel1_semantic):
+        # return m
+        return ast.unparse(m.picks[0])
+    if m := _search_ast(semantic, pcrel2_semantic):
+        return ast.unparse(m.picks[0])
+    return None
 
 
 def may_take_memory_address(semantic):
@@ -199,9 +223,11 @@ def may_take_memory_address(semantic):
 
 def get_alu_dag(semantic):
     def imm_term_semantic(self, ctx, ins):
-        ins.imm
+        # ins.PickAny
+        ins.Pick
     def unsigned_imm_term_semantic(self, ctx, ins):
-        unsigned(Any, ins.imm)
+        # unsigned(Any, ins.PickAny)
+        unsigned(Any, ins.Pick)
     def signed_term_semantic(self, ctx, ins):
         ctx.Pick[PickAny]
     def unsigned_term_semantic(self, ctx, ins):
@@ -251,11 +277,13 @@ def get_alu_dag(semantic):
         rhs_r_unsigned = True
     elif mr := _match_ast(rhs_r, _strip_expr(imm_term_semantic)):
         rhs_r_tp = "UnknownImm"
-        rhs_r_name = "imm"
+        # rhs_r_name = "imm"
+        rhs_r_name = get_ast_name(mr.picks[0])
         rhs_r_unsigned = False
     elif mr := _match_ast(rhs_r, _strip_expr(unsigned_imm_term_semantic)):
         rhs_r_tp = "UnknownImm"
-        rhs_r_name = "imm"
+        # rhs_r_name = "imm"
+        rhs_r_name = get_ast_name(mr.picks[0])
         rhs_r_unsigned = True
     else:
         return None
@@ -284,10 +312,10 @@ def get_alu_dag(semantic):
 
 def may_load_immediate(semantic):
     def li_semantic(s, ctx, ins):
-        ctx.GPR[Any] = ins.imm
+        ctx.GPR[Any] = ins.Pick
 
     m = _match_ast(semantic, li_semantic)
-    return m is not None
+    return m
 
 
 def estimate_load_immediate_ops(isa):
@@ -299,8 +327,10 @@ def estimate_load_immediate_ops(isa):
         instr = cls()
         instr.isa = isa
         instr.decode(instr.opc)  # dummy decode as all parameter is 0
-        if may_load_immediate(instr.semantic):
-            r_tp = instr.params.inputs["imm"].type_
+        if m := may_load_immediate(instr.semantic):
+            # r_tp = instr.params.inputs["imm"].type_
+            imm_key = get_ast_name(m.picks[0])
+            r_tp = instr.params.inputs[imm_key].type_
             imm = next(filter(lambda im: im.label == r_tp, isa.immediates), None)
             if imm.offset == 0:
                 li_s.append((instr, imm))
@@ -312,7 +342,8 @@ def estimate_load_immediate_ops(isa):
         dag = get_alu_dag(instr.semantic)
         if dag:
             (op, (dst_name, dst_tp), (l_name, l_tp, l_u), (r_name, r_tp, r_u)) = dag
-            if op == "add" and r_name == "imm":
+            # if op == "add" and r_name == "imm":
+            if op == "add" and r_tp == "UnknownImm":
                 r_tp = instr.params.inputs[r_name].type_
                 imm = next(filter(lambda im: im.label == r_tp, isa.immediates), None)
                 addi_s.append((instr, imm))
@@ -405,8 +436,8 @@ def estimate_load_immediate_dag(isa):
                 immxs.append(immx)
         else:
             op, imm = ops
-            r_tp = op.params.inputs["imm"].type_
-            imm = next(filter(lambda im: im.label == r_tp, isa.immediates), None)
+            # r_tp = op.params.inputs["imm"].type_
+            # imm = next(filter(lambda im: im.label == r_tp, isa.immediates), None)
             immtp = imm.label
             opstr = []
             for param in op.params.inputs.values():
