@@ -436,6 +436,7 @@ class LLVMCompiler():
             "FP": fp,
             "RA": ra,
 
+            "ra_and_callee_saved_regs": [ra] + callee_saved_regs,
             "callee_saved_regs": callee_saved_regs,
             "arg_regs": arg_regs,
             "ret_regs": ret_regs,

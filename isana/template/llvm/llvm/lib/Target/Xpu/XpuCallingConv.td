@@ -1,6 +1,6 @@
 //===-- {{ Xpu }}CallingConv.td - Calling Conventions {{ Xpu }} --------*- tablegen -*-===//
 
-def CSR_ABI0 : CalleeSavedRegs<(add {{ callee_saved_regs|join(', ') }})>;
+def CSR_ABI0 : CalleeSavedRegs<(add {{ ra_and_callee_saved_regs|join(', ') }})>;
 
 def CC_{{ Xpu }}32 : CallingConv<[
   // Promote i8/i16 args to i32

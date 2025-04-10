@@ -13,7 +13,12 @@ using namespace llvm;
 bool {{ Xpu }}FrameLowering::hasFP(
   const MachineFunction &MF
 ) const {
-  return false;
+  const TargetRegisterInfo *RegInfo = MF.getSubtarget().getRegisterInfo();
+
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  return MF.getTarget().Options.DisableFramePointerElim(MF) ||
+         RegInfo->hasStackRealignment(MF) || MFI.hasVarSizedObjects() ||
+         MFI.isFrameAddressTaken();
 }
 
 void {{ Xpu }}FrameLowering::emitPrologue(
@@ -64,6 +69,10 @@ void {{ Xpu }}FrameLowering::determineCalleeSaves(
   RegScavenger *RS
 ) const {
   TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
+
+  if (hasFP(MF)) {
+    SavedRegs.set({{ Xpu }}::{{ RA }});
+  }
 }
 
 MachineBasicBlock::iterator

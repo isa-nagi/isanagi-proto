@@ -15,8 +15,8 @@ class GPRReg(Register):
 
 GPR_regs = (
     GPRReg(0, "x0", "zero", zero=True),
-    GPRReg(1, "x1", "ra", caller=True, ra=True),
-    GPRReg(2, "x2", "sp", callee=True, sp=True),
+    GPRReg(1, "x1", "ra", ra=True),  # caller=True
+    GPRReg(2, "x2", "sp", sp=True),  # callee=True
     GPRReg(3, "x3", "gp", gp=True),
     GPRReg(4, "x4", "tp"),
     GPRReg(5, "x5", "t0", caller=True),
