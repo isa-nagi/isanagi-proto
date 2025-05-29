@@ -14,14 +14,14 @@ def print_dis(dis, file=None):
         print("{}:".format(func.label), file=file)
         for op in func.operators:
             op_bytes = [
-                '{:02x}'.format(v) for v in op.binary.to_bytes(op.ins.bytesize)
+                '{:02x}'.format(v) for v in op.binary.to_bytes(op.ins.bytesize, "big")
             ]
             if len(op_bytes) < max_bytesize:
                 op_bytes += ['  '] * (max_bytesize - len(op_bytes))
             print("  {:08x}  {}    {}".format(
                 op.addr,
                 ' '.join(op_bytes),
-                op,
+                op._disassemble(dis), # op,
             ), file=file)
 
 

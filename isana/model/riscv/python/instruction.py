@@ -1,4 +1,4 @@
-from isana.isa import Instruction, parameter, assembly, binary
+from isana.isa import unknown_op, parameter, assembly, binary
 # from isana.isa import signed
 # from isana.isa import unimpl
 
@@ -25,28 +25,28 @@ from .instructionB import instructionsZbs
 from .instructionAlias import instruction_aliases
 
 
-class unknown32op(Instruction):
+class unknown32op(unknown_op):
     opn, opc = "unknown32op", 0b00000000_00000000_00000000_00000011
     prm = parameter("", "imm:Imm")
     asm = assembly("$opn")
     bin = binary("$imm[29:0], $opc[1:0]")
 
 
-class unknown16op00(Instruction):
+class unknown16op00(unknown_op):
     opn, opc = "unknown16op", 0b00000000_00000000
     prm = parameter("", "imm:Imm")
     asm = assembly("$opn")
     bin = binary("$imm[29:0], $opc[1:0]")
 
 
-class unknown16op01(Instruction):
+class unknown16op01(unknown_op):
     opn, opc = "unknown16op", 0b00000000_00000001
     prm = parameter("", "imm:Imm")
     asm = assembly("$opn")
     bin = binary("$imm[29:0], $opc[1:0]")
 
 
-class unknown16op10(Instruction):
+class unknown16op10(unknown_op):
     opn, opc = "unknown16op", 0b00000000_00000010
     prm = parameter("", "imm:Imm")
     asm = assembly("$opn")
@@ -87,11 +87,11 @@ if True:
     instructions += instructionsZbc
     instructions += instructionsZbs
 
-# if True:
-#     instructions += [unknown32op]
-#     instructions += [unknown16op00]
-#     instructions += [unknown16op01]
-#     instructions += [unknown16op10]
+if True:
+    instructions += [unknown32op]
+    instructions += [unknown16op00]
+    instructions += [unknown16op01]
+    instructions += [unknown16op10]
 
 if True:
     instructions += instruction_aliases

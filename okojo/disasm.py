@@ -14,7 +14,8 @@ class Operator():
 
     def __repr__(self):
         if self.ins:
-            return self.ins.disassemble()
+            # return self.ins.disassemble()
+            return self._disassemble()
         return str(self)
 
     @property
@@ -66,6 +67,65 @@ class Operator():
                 if reg0_v == reg1_v:
                     return True
         return False
+
+    def _disassemble(self, disobj):
+        if not self.ins.isa:
+            return None
+        outstr = str()
+        outparam = list()
+        for ast in self.ins.asm.ast:
+            if ast == '$opn':
+                outstr += self.ins.opn
+                outparam += [self.ins.opn]
+            elif ast[0] == '$':
+                label = ast[1:]
+                if label in self.ins.params.outputs:
+                    param = self.ins.params.outputs[label]
+                    outstr += self._param_str(disobj, param)
+                    outparam += [param]
+                elif label in self.ins.params.inputs:
+                    param = self.ins.params.inputs[label]
+                    outstr += self._param_str(disobj, param)
+                    outparam += [param]
+                else:
+                    outstr += ast
+                    outparam += [ast]
+            else:
+                outstr += ast
+                outparam += [ast]
+        self.ins._disasm_str = outstr
+        self.ins._disasm_param = outparam
+        return outstr
+
+    def _param_str(self, disobj, param):
+        if self.ins.isa.is_opc_type(param.type_):
+            s = param.label
+        elif self.ins.isa.is_reg_type(param.type_):
+            s = self.ins.isa.get_reg_name(param.type_, param.number)
+        elif self.ins.isa.is_imm_type(param.type_):
+            s = self._get_imm_str(disobj, param.type_, param.value, param.instr)
+        else:
+            s = "{}:{}".format(param.label, param.type_)
+        return s
+
+    def _get_imm_str(self, disobj, tp: str, value: int, instr: 'Instruction'):
+        try:
+            tgt_addr = instr.target_addr()
+            tgt_block = None
+            tgt_offset = 0
+            for block in disobj.blocks:
+                if block.addr <= tgt_addr and tgt_addr < block.addr + block.size:
+                    if len(block.symbols) > 0:
+                        tgt_block = block
+                        tgt_offset = tgt_addr - block.addr
+            fs = ""
+            if tgt_block:
+                sign = "+" if tgt_offset >= 0 else "-"
+                fs = ": {}{}0x{:x}".format(tgt_block.label, sign, abs(tgt_offset))
+            s = "{} <{}{}>".format(str(hex(value)), hex(tgt_addr), fs)
+        except NotImplementedError:
+            s = str(hex(value))
+        return s
 
 
 def escape_label(label):

@@ -93,10 +93,13 @@ class ISA():
         self.immediates = kwargs.pop('immediates')
         self.instructions = []
         self.instruction_aliases = []
+        self.unknown_instructions = []
         instructions = kwargs.pop('instructions')
         for instr in instructions:
             if isinstance(instr, (InstructionAlias, PseudoInstruction)):
                 self.instruction_aliases.append(instr)
+            elif isinstance(instr, unknown_op):
+                self.unknown_instructions.append(instr)
             else:
                 self.instructions.append(instr)
 
@@ -187,7 +190,7 @@ class ISA():
     def _decode0(self, data: bytes, addr: int | None = None):
         # simple opecode match
         instr = None
-        for instr0 in self.instructions:
+        for instr0 in self.instructions + self.unknown_instructions:
             instr0 = instr0()
             value0 = instr0.value_swap_endian(data, self.endian)
             instr0.isa = self
@@ -249,7 +252,7 @@ class RegisterGroup():
     def __init__(self, label: str, **kwargs):
         self.label = label
         self.width = kwargs.get('width')
-        self.regs = kwargs.get('regs')
+        self.regs = copy.deepcopy(kwargs.get('regs'))
         for i, reg in enumerate(self.regs):
             reg.group = self
             reg.idx = i
@@ -357,8 +360,9 @@ class ImmS(Immediate):
         super().__init__(label, **kwargs)
 
     def signed(self, value):
-        if value & (1 << (self.width - 1)):
-            value = value - (1 << self.width)
+        msb = self.width + self.offset
+        if value & (1 << (msb - 1)):
+            value = value - (1 << msb)
         return value
 
     def cast(self, value):
