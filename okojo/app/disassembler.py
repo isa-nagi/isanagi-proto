@@ -21,7 +21,7 @@ def print_dis(dis, file=None):
             print("  {:08x}  {}    {}".format(
                 op.addr,
                 ' '.join(op_bytes),
-                op._disassemble(dis), # op,
+                op._disassemble(),  # op,
             ), file=file)
 
 

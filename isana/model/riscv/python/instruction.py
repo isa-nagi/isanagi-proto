@@ -36,21 +36,21 @@ class unknown16op00(unknown_op):
     opn, opc = "unknown16op", 0b00000000_00000000
     prm = parameter("", "imm:Imm")
     asm = assembly("$opn")
-    bin = binary("$imm[29:0], $opc[1:0]")
+    bin = binary("$imm[13:0], $opc[1:0]")
 
 
 class unknown16op01(unknown_op):
     opn, opc = "unknown16op", 0b00000000_00000001
     prm = parameter("", "imm:Imm")
     asm = assembly("$opn")
-    bin = binary("$imm[29:0], $opc[1:0]")
+    bin = binary("$imm[13:0], $opc[1:0]")
 
 
 class unknown16op10(unknown_op):
     opn, opc = "unknown16op", 0b00000000_00000010
     prm = parameter("", "imm:Imm")
     asm = assembly("$opn")
-    bin = binary("$imm[29:0], $opc[1:0]")
+    bin = binary("$imm[13:0], $opc[1:0]")
 
 
 instructions = []

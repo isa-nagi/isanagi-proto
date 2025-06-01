@@ -1,4 +1,5 @@
 from .elf import SectionHeader, SymbolTable
+from isana.isa import Instruction
 import re
 import sys
 
@@ -68,7 +69,7 @@ class Operator():
                     return True
         return False
 
-    def _disassemble(self, disobj):
+    def _disassemble(self):
         if not self.ins.isa:
             return None
         outstr = str()
@@ -81,11 +82,11 @@ class Operator():
                 label = ast[1:]
                 if label in self.ins.params.outputs:
                     param = self.ins.params.outputs[label]
-                    outstr += self._param_str(disobj, param)
+                    outstr += self._param_str(param)
                     outparam += [param]
                 elif label in self.ins.params.inputs:
                     param = self.ins.params.inputs[label]
-                    outstr += self._param_str(disobj, param)
+                    outstr += self._param_str(param)
                     outparam += [param]
                 else:
                     outstr += ast
@@ -97,22 +98,23 @@ class Operator():
         self.ins._disasm_param = outparam
         return outstr
 
-    def _param_str(self, disobj, param):
+    def _param_str(self, param):
         if self.ins.isa.is_opc_type(param.type_):
             s = param.label
         elif self.ins.isa.is_reg_type(param.type_):
             s = self.ins.isa.get_reg_name(param.type_, param.number)
         elif self.ins.isa.is_imm_type(param.type_):
-            s = self._get_imm_str(disobj, param.type_, param.value, param.instr)
+            s = self._get_imm_str(param.type_, param.value, param.instr)
         else:
             s = "{}:{}".format(param.label, param.type_)
         return s
 
-    def _get_imm_str(self, disobj, tp: str, value: int, instr: 'Instruction'):
+    def _get_imm_str(self, tp: str, value: int, instr: Instruction):
         try:
             tgt_addr = instr.target_addr()
             tgt_block = None
             tgt_offset = 0
+            disobj = self.block.disobj
             for block in disobj.blocks:
                 if block.addr <= tgt_addr and tgt_addr < block.addr + block.size:
                     if len(block.symbols) > 0:
@@ -134,6 +136,7 @@ def escape_label(label):
 
 class BasicBlock():
     def __init__(self):
+        self.disobj = None
         self.symbols = list()
         self.operators = list()
         self.jump_srcs = list()
@@ -359,13 +362,17 @@ class DisassemblyObject():
 
     def _build_obj(self):
         print("# building object")
-        self.operators = self._decode()
+        print("## decoding")
+        self.operators = self._decode()  # TODO: speed up
         text_sts = self._collect_text_symbol_tables()
+        print("## collecting jumpt targets")
         block_addrs = [st.st_value for st in text_sts]
         block_addrs = sorted(list(set(block_addrs)))
         block_addrs += self._collect_jump_targets()
+        print("## building basicblocks")
         block_addrs = sorted(list(set(block_addrs)))
-        self._build_basicblocks(block_addrs, text_sts)
+        self._build_basicblocks(block_addrs, text_sts)  # TODO: speed up
+        print("## building functions")
         self._build_functions(text_sts)
         print("# building cfg")
         self._build_control_flow_graph()
@@ -449,6 +456,7 @@ class DisassemblyObject():
     def _build_basicblocks(self, addrs, text_sts):
         for i in range(len(addrs)):
             block = BasicBlock()
+            block.disobj = self
             begin = addrs[i]
             end = addrs[i + 1] if i < len(addrs) - 1 else sys.maxsize
             sh = self._text_section_header(begin)
@@ -461,11 +469,26 @@ class DisassemblyObject():
                 if st.st_value == begin:
                     block.symbols.append(st)
             self.blocks.append(block)
-        for op in self.operators:
-            for block in self.blocks:
-                if block.addr <= op.addr and op.addr + op.size <= block.addr + block.size:
-                    block.operators.append(op)
-                    op.block = block
+        op1000s = dict()
+        for i, op in enumerate(self.operators):
+            key = op.addr // 0x1000
+            op1000s.setdefault(key, i)
+        for block in self.blocks:
+            opidx = op1000s.get(block.addr // 0x1000)
+            op = self.operators[opidx]
+            while block.addr > op.addr:
+                opidx += 1
+                if opidx >= len(self.operators):
+                    break
+                op = self.operators[opidx]
+            op = self.operators[opidx]
+            while block.addr <= op.addr and op.addr + op.size <= block.addr + block.size:
+                block.operators.append(op)
+                op.block = block
+                opidx += 1
+                if opidx >= len(self.operators):
+                    break
+                op = self.operators[opidx]
         for block in self.blocks:
             old_symbols = block.symbols[:]
             new_symbols = list()

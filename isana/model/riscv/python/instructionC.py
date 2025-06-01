@@ -459,7 +459,28 @@ class cm_jalt(InstrCMJT):
     # is_jump = True
 
 
-instructionsZca = [
+instructionsZca = []
+
+if xlen in (64, 128):
+    instructionsZca += [
+        c_ld,
+        c_sd,
+        c_addiw,
+        c_subw,
+        c_addw,
+        c_ldsp,
+        c_sdsp,
+    ]
+
+if xlen == 128:
+    instructionsZca += [
+        c_lq,
+        c_sq,
+        c_lqsp,
+        c_sqsp,
+    ]
+
+instructionsZca += [
     illegal,
     c_addi4spn,
     c_lw,
@@ -493,25 +514,6 @@ instructionsZca = [
     c_swsp,
 ]
 
-if xlen in (64, 128):
-    instructionsZca += [
-        c_ld,
-        c_sd,
-        c_addiw,
-        c_subw,
-        c_addw,
-        c_ldsp,
-        c_sdsp,
-    ]
-
-if xlen == 128:
-    instructionsZca += [
-        c_lq,
-        c_sq,
-        c_lqsp,
-        c_sqsp,
-    ]
-
 if xlen == 32:
     instructionsZcf = [
         c_flw,
@@ -519,6 +521,8 @@ if xlen == 32:
         c_fsw,
         c_fswsp,
     ]
+else:
+    instructionsZcf = []
 
 instructionsZcd = [
     c_fld,
