@@ -293,3 +293,56 @@ class ElfObject():
                 st.name = binary[offset:i].decode()
         self.symbol_tables = sts
         return self.symbol_tables
+
+    def write(self, f):
+        binary = b''
+        # elf header
+        elf_header = self.elf_header
+        args = [getattr(self.eh, k) for k in self.eh.ei_key] + [0, 0, 0, 0, 0]
+        binary += struct.pack('<4sBBBBBBBBBBBB', *args)
+        args = [getattr(self.eh, k) for k in self.eh.e_key]
+        if elf_header.ei_class == elf_header.CLASS_32:
+            if elf_header.ei_data == elf_header.DATA_2MSB:
+                binary += struct.pack('>HHLLLLLHHHHHH', *args)
+            else:
+                binary += struct.pack('<HHLLLLLHHHHHH', *args)
+        elif elf_header.ei_class == elf_header.CLASS_64:
+            if elf_header.ei_data == elf_header.DATA_2MSB:
+                binary += struct.pack('>HHLQQQLHHHHHH', *args)
+            else:
+                binary += struct.pack('<HHLQQQLHHHHHH', *args)
+        # program headers
+        for ph_idx in range(elf_header.e_phnum):
+            ph = self.program_headers[ph_idx]
+            if elf_header.ei_class == elf_header.CLASS_32:
+                args = [getattr(ph, k) for k in ph.p_key_32]
+                if elf_header.ei_data == elf_header.DATA_2MSB:
+                    ph_values = struct.pack('>LLLLLLLL', *args)
+                else:
+                    ph_values = struct.pack('<LLLLLLLL', *args)
+                binary += ph_values
+            elif elf_header.ei_class == elf_header.CLASS_64:
+                args = [getattr(ph, k) for k in ph.p_key_64]
+                if elf_header.ei_data == elf_header.DATA_2MSB:
+                    ph_values = struct.pack('>LLQQQQQQ', *args)
+                else:
+                    ph_values = struct.pack('<LLQQQQQQ', *args)
+                binary += ph_values
+        # section data
+        binary += self.f[len(binary):elf_header.e_shoff]
+        # section headers
+        for sh_idx in range(elf_header.e_shnum):
+            sh = self.section_headers[sh_idx]
+            args = [getattr(sh, k) for k in sh.sh_key]
+            if elf_header.ei_class == elf_header.CLASS_32:
+                if elf_header.ei_data == elf_header.DATA_2MSB:
+                    sh_values = struct.pack('>LLLLLLLLLL', *args)
+                else:
+                    sh_values = struct.pack('<LLLLLLLLLL', *args)
+            elif elf_header.ei_class == elf_header.CLASS_64:
+                if elf_header.ei_data == elf_header.DATA_2MSB:
+                    sh_values = struct.pack('>LLQQQQLLQQ', *args)
+                else:
+                    sh_values = struct.pack('<LLQQQQLLQQ', *args)
+            binary += sh_values
+        f.write(binary)
