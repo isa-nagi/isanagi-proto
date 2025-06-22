@@ -11,22 +11,22 @@ class SRReg(Register):
 
 
 GPR_regs = (
-    GPRReg(0, "r0", zero=True),
+    GPRReg(0, "r0", "zero", zero=True),
     GPRReg(1, "r1"),
     GPRReg(2, "r2"),
     GPRReg(3, "r3"),
     GPRReg(4, "r4"),
     GPRReg(5, "r5"),
-    GPRReg(6, "r6"),
+    GPRReg(6, "r6", "t9"),
     GPRReg(7, "r7"),
     GPRReg(8, "r8"),
     GPRReg(9, "r9"),
     GPRReg(10, "r10"),
-    GPRReg(11, "r11", gp=True),
-    GPRReg(12, "r12", fp=True),
-    GPRReg(13, "r13", sp=True),
-    GPRReg(14, "r14", ra=True),
-    GPRReg(15, "r15", status=True),
+    GPRReg(11, "r11", "gp", gp=True),
+    GPRReg(12, "r12", "fp", fp=True),
+    GPRReg(13, "r13", "sp", sp=True),
+    GPRReg(14, "r14", "lr", ra=True),
+    GPRReg(15, "r15", "sw", status=True),
 )
 
 GPR = RegisterGroup("GPR", width=32, regs=(
@@ -38,7 +38,7 @@ SR = RegisterGroup("SR", width=32, regs=(
 ))
 
 C0R = RegisterGroup("C0R", width=32, regs=(
-    Register(0, "pc", dwarf_number=32),
+    Register(0, "pc", dwarf_number=32, pc=True),
     Register(1, "epc", dwarf_number=32),
 ))
 

@@ -164,14 +164,16 @@ def auto_make_relocations(isa):
         if not hasattr(cls, 'semantic'):
             continue
         instr = cls()
+        instr.isa = isa
         bin_filtered = re.sub(r"\$(?!opc|imm)\w+", r"$_", str(instr.bin))
         relocinfo = (instr.bitsize, bin_filtered)
-        if may_change_pc_absolute(instr.semantic):
+        instr.decode(instr.opc)  # dummy decode as all parameter is 0
+        if may_change_pc_absolute(instr):
             key = "pc_abs"
             relocs[key].append(relocinfo)
             instrs.setdefault((key, bin_filtered), list())
             instrs[(key, bin_filtered)].append(cls)
-        elif may_change_pc_relative(instr.semantic):
+        elif may_change_pc_relative(instr):
             key = "pc_rel"
             relocs[key].append(relocinfo)
             instrs.setdefault((key, bin_filtered), list())
@@ -277,7 +279,7 @@ def get_instr_alias(alias, isa):
                 prmobj = isa.get_param_obj(instr_ops[idx][1:], instr)
                 cls = prmobj.label
                 if isinstance(prmobj, Immediate):
-                    if may_change_pc_relative(instr.semantic):
+                    if may_change_pc_relative(instr):
                         cls = "Br" + cls
                 dstnode.append("{}:${}".format(cls, label))
             else:
@@ -294,6 +296,7 @@ class LLVMCompiler():
 
     def __init__(self, isa):
         self.isa = isa
+        self.isa.new_context()
         self.outdir = "out"
         self._prepare_processorinfo()
 
@@ -355,8 +358,8 @@ class LLVMCompiler():
         reg_defs = []
         reg_labels = []
         for reggroup in self.isa.registers:
-            if reggroup.label == "PCR":
-                continue
+            # if reggroup.label == "PCR":
+            #     continue
             for reg in reggroup:
                 if reg.label in reg_labels:
                     continue
@@ -380,8 +383,8 @@ class LLVMCompiler():
 
         regcls_defs = []
         for reggroup in self.isa.registers:
-            if reggroup.label == "PCR":
-                continue
+            # if reggroup.label == "PCR":
+            #     continue
             reg_varnames = ["{}::{}".format(
                 self.namespace, reg.label.upper()) for reg in reggroup]
             reg_varnames = ',\n'.join(reg_varnames)
@@ -488,7 +491,7 @@ class LLVMCompiler():
             instr.isa = self.isa
             instr.decode(instr.opc)  # dummy decode as all parameter is 0
             instr_def = InstrDefs()
-            if m := may_change_pc_relative(instr.semantic):
+            if m := may_change_pc_relative(instr):
                 imm_key = m
                 if imm_key.startswith("ins."):
                     imm_key = imm_key[4:]
@@ -518,7 +521,7 @@ class LLVMCompiler():
             instr.decode(instr.opc)  # dummy decode as all parameter is 0
             instr_def = InstrDefs()
 
-            pc_relative = may_change_pc_relative(instr.semantic)
+            pc_relative = may_change_pc_relative(instr)
 
             instr_def.varname = instr.__class__.__name__.upper()
             # instr_def.ins = ', '.join([
@@ -838,7 +841,6 @@ class LLVMCompiler():
             out_fdir = os.path.join(self.outdir, *[d.replace("xpu", self.target.lower()) for d in fdirs])
             out_fname = fname.replace("xpu", self.target.lower())
             out_fpath = os.path.join(out_fdir, out_fname)
-            print(out_fpath)
             os.makedirs(out_fdir, exist_ok=True)
             with open(out_fpath, "w") as f:
                 f.write(final_text)

@@ -84,7 +84,6 @@ def _match_ast(src, dst):
         srccode = inspect.getsource(src)
         srccode = dedent(srccode)
         srcbody = ast.parse(srccode).body[0].body
-        # print(ast.dump(ast.parse(srccode), indent=4))
     else:
         srcbody = [src]
     if callable(dst):
@@ -176,34 +175,71 @@ def _match_ast_line(src_ites, dst_ites):
     return mobj
 
 
-def may_change_pc_absolute(semantic):
+def may_change_pc_absolute(instr):
     def pcabs_semantic(self, ctx, ins):
-        ctx.PCR.pc = PickAny
+        PickAny.pc = PickAny
     def pcabs_ng1_semantic(self, ctx, ins):
-        ctx.PCR.pc + Any
+        PickAny.pc + Any
     def pcabs_ng2_semantic(self, ctx, ins):
-        Any + ctx.PCR.pc
+        Any + PickAny.pc
 
+    semantic = instr.semantic
     if m := _search_ast(semantic, pcabs_semantic):
-        rhs = m.picks[0]
-        mng1 = _match_ast(rhs, pcabs_ng1_semantic)
-        mng2 = _match_ast(rhs, pcabs_ng2_semantic)
-        if not (mng1 or mng2):
-            return m
+        try:
+            grpn = m.picks[0].attr
+            is_pc = eval(f'instr.isa._ctx.{grpn}.get_obj("pc").is_pc')
+        except Exception:
+            is_pc = False
+        rhs = m.picks[1]
+        if is_pc:
+            is_pc1 = is_pc2 = False
+            if m_ng1 := _match_ast(rhs, pcabs_ng1_semantic):
+                try:
+                    grpn = m_ng1.picks[1].attr
+                    is_pc1 = eval(f'instr.isa._ctx.{grpn}.get_obj("pc").is_pc')
+                except Exception:
+                    is_pc1 = False
+            if m_ng2 := _match_ast(rhs, pcabs_ng2_semantic):
+                try:
+                    grpn = m_ng2.picks[1].attr
+                    is_pc2 = eval(f'instr.isa._ctx.{grpn}.get_obj("pc").is_pc')
+                except Exception:
+                    is_pc2 = False
+            if not (is_pc1 or is_pc2):
+                return ast.unparse(m.picks[1])
     return None
 
 
-def may_change_pc_relative(semantic):
+def may_change_pc_relative(instr):
     def pcrel1_semantic(self, ctx, ins):
-        ctx.PCR.pc = ctx.PCR.pc + PickAny
+        PickAny = PickAny + PickAny
     def pcrel2_semantic(self, ctx, ins):
-        ctx.PCR.pc += PickAny
+        PickAny += PickAny
 
+    semantic = instr.semantic
     if m := _search_ast(semantic, pcrel1_semantic):
-        # return m
-        return ast.unparse(m.picks[0])
+        try:
+            regn0 = m.picks[0].attr
+            grpn0 = m.picks[0].value.attr
+            is_pc0 = eval(f'instr.isa._ctx.{grpn0}.get_obj("{regn0}").is_pc')
+            regn1 = m.picks[1].attr
+            grpn1 = m.picks[1].value.attr
+            is_pc1 = eval(f'instr.isa._ctx.{grpn1}.get_obj("{regn1}").is_pc')
+        except Exception:
+            is_pc0 = is_pc1 = False
+        if is_pc0 and is_pc1:
+            return ast.unparse(m.picks[2])
     if m := _search_ast(semantic, pcrel2_semantic):
-        return ast.unparse(m.picks[0])
+        try:
+            m.picks[0]  # ctx.PC.pc
+            m.picks[1]  # imm
+            regn = m.picks[0].attr
+            grpn = m.picks[0].value.attr
+            is_pc = eval(f'instr.isa._ctx.{grpn}.get_obj("{regn}").is_pc')
+        except Exception:
+            is_pc = False
+        if is_pc:
+            return ast.unparse(m.picks[1])
     return None
 
 

@@ -4,9 +4,11 @@ from .defs import xlen
 
 
 PCR = RegisterGroup("PCR", width=xlen, regs=(
-    Register(0, "pc"),
+    Register(0, "pc", pc=True),
     Register(1, "prev_pc"),
 ))
+for reg in PCR.regs:
+    reg.dwarf_number = reg.number + 3072
 
 
 class GPRReg(Register):
@@ -481,3 +483,5 @@ CSR = RegisterGroup("CSR", width=xlen, regs=(
     CSRReg(0x7B2, "dscratch0"),
     CSRReg(0x7B3, "dscratch1"),
 ))
+for reg in CSR.regs:
+    reg.dwarf_number = reg.number + 4096

@@ -102,15 +102,15 @@ class ISA():
                 self.unknown_instructions.append(instr)
             else:
                 self.instructions.append(instr)
-
         self._compiler = kwargs.pop('compiler', None)
-        if (type(self._compiler) is type(object)):
-            self._compiler = self._compiler(self)
-
         self.context = kwargs.pop('context')
         self._ctx = None
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+        # init after all argument set
+        if (type(self._compiler) is type(object)):
+            self._compiler = self._compiler(self)
 
     @property
     def compiler(self):
@@ -291,6 +291,12 @@ class RegisterGroup():
     def max_reg_number(self):
         return max([reg.number for reg in self.regs])
 
+    def get_obj(self, key):
+        for reg in self.regs:
+            if key == reg.label:
+                return reg
+        return None
+
 
 class Register():
     def __init__(self, number: int, label: str, *args, **kwargs):
@@ -307,8 +313,9 @@ class Register():
         self.is_stack_pointer = kwargs.get('sp', False)
         self.is_frame_pointer = kwargs.get('fp', False)
         self.is_global_pointer = kwargs.get('gp', False)
+        self.is_pc = kwargs.get('pc', False)
         self.idx = kwargs.get('idx', number)
-        self.dwarf_number = kwargs.get('dwarf_number', number)
+        self.dwarf_number = kwargs.get('dwarf', number)
         self.value = 0
 
 
