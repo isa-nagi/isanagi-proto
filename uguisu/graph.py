@@ -107,6 +107,28 @@ class Node():
     def dsts_by_depth(self):
         return [n for n, g in self._walk_dsts_by_depth() if g]
 
+    def dsts_except_relay(self):
+        dsts = self._dsts[:]
+        for i in range(len(dsts)):
+            while isinstance(dsts[i], RelayNode):
+                dsts[i] = dsts[i]._dsts[0]
+        c_srcs = self._cyclic_srcs[:]
+        for i in range(len(c_srcs)):
+            while isinstance(c_srcs[i], RelayNode):
+                c_srcs[i] = c_srcs[i]._cyclic_srcs[0]
+        return dsts + c_srcs
+
+    def srcs_except_relay(self):
+        srcs = self._srcs[:]
+        for i in range(len(srcs)):
+            while isinstance(srcs[i], RelayNode):
+                srcs[i] = srcs[i]._srcs[0]
+        c_dsts = self._cyclic_dsts[:]
+        for i in range(len(c_dsts)):
+            while isinstance(c_dsts[i], RelayNode):
+                c_dsts[i] = c_dsts[i]._cyclic_dsts[0]
+        return srcs + c_dsts
+
 
 class RelayNode(Node):
     def __init__(self):
@@ -324,7 +346,7 @@ class Graph():
                     for i in range(diff_rank - 1):
                         relay = RelayNode()
                         relays.append(relay)
-                    relays[0]._srcs.append(node)
+                    relays[0]._cyclic_srcs.append(node)
                     relays[0].rank = node.rank - 1
                     node._cyclic_dsts.remove(dst)
                     node._cyclic_dsts.append(relays[0])
@@ -357,10 +379,10 @@ class Graph():
     def _move_node_horizontally(self):
         self._sort_to_avoid_cross_edge()
         self._arrange_nodes_to_avoid_overlap()
-        for i in range(3):
-            self._move_nodes_based_on_srcs_position()
-            self._move_nodes_based_on_dsts_position()
-            self._move_relays()
+        for i in range(2):
+            self._move_nodes_based_on_dependency()
+            self._arrange_nodes_to_avoid_overlap()
+        self._move_relays()
         self._move_to_fit_within_area()
 
     def _sort_to_avoid_cross_edge(self):
@@ -389,112 +411,59 @@ class Graph():
                 node.rect.cx = (i + 1) / (len(new_nodes) + 1) * 100
 
     def _arrange_nodes_to_avoid_overlap(self):
-        max_w = 0
         for nodes in self._nodes_split_by_rank():
-            w = sum((n.rect.w + n.margin.x * 2) for n in nodes)
-            max_w = max(max_w, w)
-        for nodes in self._nodes_split_by_rank():
-            sum_x = self.config['margin']
-            for node in nodes:
-                node.rect.x = sum_x + node.margin.x
-                sum_x += node.rect.w + node.margin.x * 2
-            sum_x -= self.config['margin']
-            for node in nodes:
-                node.rect.x += (max_w - sum_x) / 2
+            nodes_sorted = sorted(nodes, key=lambda n: n.rect.cx)
+            for i in range(20):
+                # left to right
+                n = nodes_sorted[0]
+                next_x = n.rect.cx - n.rect.w / 2 - n.margin.x
+                for ni, n in enumerate(nodes_sorted):
+                    if (n.rect.cx - n.rect.w / 2 - n.margin.x) < next_x:
+                        if isinstance(n, RelayNode):
+                            n.rect.cx = next_x + n.rect.w / 2 + n.margin.x
+                        else:
+                            for nn in nodes_sorted[ni:]:
+                                nn.rect.cx += (n.rect.w / 2 + n.margin.x) * 0.1
+                    next_x = n.rect.cx + n.rect.w / 2 + n.margin.x
+                # right to left
+                n = nodes_sorted[-1]
+                next_x = n.rect.cx + n.rect.w / 2 + n.margin.x
+                for ni, n in enumerate(reversed(nodes_sorted)):
+                    if (n.rect.cx + n.rect.w / 2 + n.margin.x) > next_x:
+                        if isinstance(n, RelayNode):
+                            n.rect.cx = next_x - n.rect.w / 2 - n.margin.x
+                        else:
+                            for nn in list(reversed(nodes_sorted))[ni:]:
+                                nn.rect.cx -= (n.rect.w / 2 + n.margin.x) * 0.1
+                    next_x = n.rect.cx - n.rect.w / 2 - n.margin.x
 
-    def _move_nodes_based_on_srcs_position(self):
+    def _move_nodes_based_on_dependency(self):
+        new_x = {}
         for nodes in self._nodes_split_by_rank():
-            rests = nodes[:]
-            while len(rests) > 0:
-                node = rests[0]
-                if len(node._srcs + [n for n in node._cyclic_dsts if n.rank != node.rank]) == 0:
-                    rests.remove(node)
+            for node in nodes:
+                if isinstance(node, RelayNode):
                     continue
-                siblings = list()
+                deps = []
                 for src in node._srcs:
-                    _dsts = src._dsts
-                    for dst in _dsts:
-                        if dst not in siblings and dst in nodes:
-                            siblings.append(dst)
-                for dst in [n for n in node._cyclic_dsts if n.rank != node.rank]:
-                    _srcs = dst._cyclic_srcs
-                    for src in _srcs:
-                        if src not in siblings and src in nodes:
-                            siblings.append(src)
-                srcs = node._srcs + [n for n in node._cyclic_dsts if n.rank != node.rank]
-                src_center = (min(n.rect.x - n.margin.x for n in srcs) + max(n.rect.x1 + n.margin.x for n in srcs)) / 2
-                for sib in siblings:
-                    sib_center = sib.rect.cx
-                    mv = src_center - sib_center
-                    sib.rect.x += mv * 0.9
-                    if sib in rests:
-                        rests.remove(sib)
-            center = self.x + self.w / 2
-            sorted_nodes = sorted(nodes, key=lambda n: n.rect.cx)
-            lefts = [n for n in sorted_nodes if n.rect.cx < center]
-            rights = [n for n in sorted_nodes if n.rect.cx >= center]
-            if len(lefts) > 0 and len(rights) > 0:
-                n0 = lefts[-1]
-                n1 = rights[0]
-                if (n0.rect.x1 + n0.margin.x) > (n1.rect.x - n1.margin.x):
-                    n0.rect.x = n1.rect.x - n1.margin.x - n0.margin.x - n0.rect.w
-            for i in reversed(range(0, len(lefts) - 1)):
-                n0 = lefts[i]
-                n1 = lefts[i + 1]
-                if (n0.rect.x1 + n0.margin.x) > (n1.rect.x - n1.margin.x):
-                    n0.rect.x = n1.rect.x - n1.margin.x - n0.margin.x - n0.rect.w
-            for i in range(1, len(rights)):
-                n0 = rights[i - 1]
-                n1 = rights[i]
-                if (n0.rect.x1 + n0.margin.x) > (n1.rect.x - n1.margin.x):
-                    n1.rect.x = n0.rect.x1 + n0.margin.x + n1.margin.x
-
-    def _move_nodes_based_on_dsts_position(self):
-        for nodes in reversed(self._nodes_split_by_rank()):
-            rests = nodes[:]
-            while len(rests) > 0:
-                node = rests[0]
-                if len(node._dsts + [n for n in node._cyclic_srcs if n.rank != node.rank]) == 0:
-                    rests.remove(node)
-                    continue
-                siblings = list()
+                    src_dsts = src.dsts_except_relay()
+                    deps.append({'x': src.rect.cx, 'n': len(src_dsts)})
                 for dst in node._dsts:
-                    _srcs = dst._srcs
-                    for src in _srcs:
-                        if src not in siblings and src in nodes:
-                            siblings.append(src)
-                for src in [n for n in node._cyclic_srcs if n.rank != node.rank]:
-                    _dsts = src._cyclic_dsts
-                    for dst in _dsts:
-                        if dst not in siblings and dst in nodes:
-                            siblings.append(dst)
-                dsts = node._dsts + [n for n in node._cyclic_srcs if n.rank != node.rank]
-                dst_center = (min(n.rect.x - n.margin.x for n in dsts) + max(n.rect.x1 + n.margin.x for n in dsts)) / 2
-                for sib in siblings:
-                    sib_center = sib.rect.cx
-                    mv = dst_center - sib_center
-                    sib.rect.x += mv * 0.3
-                    if sib in rests:
-                        rests.remove(sib)
-            center = self.x + self.w / 2
-            sorted_nodes = sorted(nodes, key=lambda n: n.rect.cx)
-            lefts = [n for n in sorted_nodes if n.rect.cx < center]
-            rights = [n for n in sorted_nodes if n.rect.cx >= center]
-            if len(lefts) > 0 and len(rights) > 0:
-                n0 = lefts[-1]
-                n1 = rights[0]
-                if (n0.rect.x1 + n0.margin.x) > (n1.rect.x - n1.margin.x):
-                    n0.rect.x = n1.rect.x - n1.margin.x - n0.margin.x - n0.rect.w
-            for i in reversed(range(0, len(lefts) - 1)):
-                n0 = lefts[i]
-                n1 = lefts[i + 1]
-                if (n0.rect.x1 + n0.margin.x) > (n1.rect.x - n1.margin.x):
-                    n0.rect.x = n1.rect.x - n1.margin.x - n0.margin.x - n0.rect.w
-            for i in range(1, len(rights)):
-                n0 = rights[i - 1]
-                n1 = rights[i]
-                if (n0.rect.x1 + n0.margin.x) > (n1.rect.x - n1.margin.x):
-                    n1.rect.x = n0.rect.x1 + n0.margin.x + n1.margin.x
+                    dst_srcs = dst.srcs_except_relay()
+                    deps.append({'x': dst.rect.cx, 'n': len(dst_srcs)})
+                c = 1
+                for d in deps:
+                    c *= d['n']
+                sum_c_ci_xi = sum_c_ci = 0
+                for d in deps:
+                    if d['n']:
+                        sum_c_ci_xi += c / d['n'] * d['x']
+                        sum_c_ci += c / d['n']
+                new_x[node] = sum_c_ci_xi / sum_c_ci if sum_c_ci else node.rect.cx
+        for nodes in self._nodes_split_by_rank():
+            for node in nodes:
+                if isinstance(node, RelayNode):
+                    continue
+                node.rect.cx = new_x[node]
 
     def __move_until_hit(self, node, dx, ranks):
         ranks = [n for n in ranks if n == node or not isinstance(n, RelayNode)]
@@ -527,8 +496,9 @@ class Graph():
             pass
             avg = sum(r.rect.cx for r in edge._relays) / len(edge._relays)
             for relay in edge._relays:
-                ranks = ranknodes[relay.rank]
-                self.__move_until_hit(relay, avg - relay.rect.cx, ranks)
+                # ranks = ranknodes[relay.rank]
+                # self.__move_until_hit(relay, avg - relay.rect.cx, ranks)
+                relay.rect.cx = avg
         pass
 
     def _move_to_fit_within_area(self):

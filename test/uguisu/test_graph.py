@@ -19,6 +19,7 @@ def main():
         Edge(b, d),
         Edge(c, f),
         Edge(c, e),
+        Edge(e, e),
         Edge(f, g),
         Edge(f, h),
         Edge(g, h),
