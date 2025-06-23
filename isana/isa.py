@@ -173,11 +173,11 @@ class ISA():
             return None
         return None
 
-    def param_str(self, param):
+    def param_str(self, param, alias=True):
         if self.is_opc_type(param.type_):
             s = param.label
         elif self.is_reg_type(param.type_):
-            s = self.get_reg_name(param.type_, param.number)
+            s = self.get_reg_name(param.type_, param.number, alias=alias)
         elif self.is_imm_type(param.type_):
             s = self.get_imm_str(param.type_, param.value, param.instr)
         else:

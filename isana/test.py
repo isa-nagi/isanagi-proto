@@ -16,26 +16,32 @@ class TestBits():
         self.lsb = lsb + offset
 
     def zero(self):
+        '''zero'''
         return 0
 
     def one(self):
+        '''one'''
         return 2 ** self.lsb
 
     def umax(self):
+        '''umax'''
         v = 2 ** (self.msb + 1) - 1
         v -= 2 ** (self.lsb) - 1
         return v
 
     def smin(self):
+        '''smin'''
         v = 2 ** (self.msb)
         return v
 
     def smax(self):
+        '''smax'''
         v = 2 ** (self.msb) - 1
         v -= 2 ** (self.lsb) - 1
         return v
 
     def rand(self):
+        '''rand'''
         v = random.randrange(self.one(), self.umax() + 1)
         return v
 
@@ -77,7 +83,24 @@ class TestOperand():
             max_ = 2 ** imm.width - 1
         return (min_, max_)
 
+    def const(value):
+        def _const(self):
+            '''const'''
+            param = self.param
+            tp = self.tp
+            if self.isa.is_opc_type(tp):
+                pass
+            elif self.isa.is_reg_type(tp):
+                param.number = value
+                param.value = None
+            elif self.isa.is_imm_type(tp):
+                param.number = None
+                param.value = value
+            return self.param
+        return _const
+
     def zero(self):
+        '''zero'''
         param = self.param
         tp = self.tp
         if self.isa.is_opc_type(tp):
@@ -91,6 +114,7 @@ class TestOperand():
         return self.param
 
     def one(self):
+        '''one'''
         param = self.param
         tp = self.tp
         if self.isa.is_opc_type(tp):
@@ -104,6 +128,7 @@ class TestOperand():
         return self.param
 
     def min(self):
+        '''min'''
         param = self.param
         tp = self.tp
         if self.isa.is_opc_type(tp):
@@ -118,6 +143,7 @@ class TestOperand():
         return self.param
 
     def max(self):
+        '''max'''
         param = self.param
         tp = self.tp
         if self.isa.is_opc_type(tp):
@@ -133,6 +159,7 @@ class TestOperand():
         return self.param
 
     def rand(self):
+        '''rand'''
         param = self.param
         tp = self.tp
         if self.isa.is_opc_type(tp):
@@ -153,6 +180,21 @@ class InstructionTest():
         self.isa = isa
         self.instr = instr()
         self.instr.isa = self.isa
+        self.reg_alias = True
+
+    def merge_case(self, cases):
+        _cases = [list(r.items()) for r in cases]
+        _cases = [(r[0], (r[1][0], [r[1][1]])) for r in _cases]
+        new_cases = [_cases[0]]
+        for r in _cases[1:]:
+            keys = tuple(nr[0][1] for nr in new_cases)
+            try:
+                idx = keys.index(r[0][1])
+                new_cases[idx][1][1].append(r[1][1])
+            except Exception:
+                new_cases.append(r)
+        _cases = [dict(r) for r in new_cases]
+        return _cases
 
     def gen_binary_edge_case(self):
         len_bits_ex_opc = len([b for b in self.instr.bin.bitss if b.label != "$opc"])
@@ -164,14 +206,14 @@ class InstructionTest():
             TestBits.umax,
         ]
         valuefuncs = list(itertools.product(valuefuncs, repeat=len_bits_ex_opc))
-        res = self.gen_binary_case(valuefuncs)
-        return res
+        cases = self.gen_binary_case(valuefuncs)
+        return cases
 
     def gen_binary_random_case(self, repeat=1):
         len_bits_ex_opc = len([b for b in self.instr.bin.bitss if b.label != "$opc"])
         valuefuncs = [[TestBits.rand] * len_bits_ex_opc] * repeat
-        res = self.gen_binary_case(valuefuncs)
-        return res
+        cases = self.gen_binary_case(valuefuncs)
+        return cases
 
     def gen_binary_case(self, valuefuncs):
         offsets = []
@@ -181,7 +223,7 @@ class InstructionTest():
             sum_bits += bits.msb - bits.lsb + 1
         offsets.reverse()
 
-        res = []
+        cases = []
         for vfi in range(len(valuefuncs)):
             value = 0
             funcstrs = []
@@ -206,8 +248,8 @@ class InstructionTest():
                     bi_ex_opc += 1
             if self.isa.endian == "big":
                 value = byteswap(value, self.instr.bytesize)
-            res.append({'value': value, 'func': funcstrs})
-        return res
+            cases.append({'value': value, 'func': funcstrs})
+        return cases
 
     def gen_asm_edge_case(self):
         len_ops_ex_opc = 0
@@ -221,8 +263,8 @@ class InstructionTest():
             TestOperand.max,
         ]
         valuefuncs = list(itertools.product(valuefuncs, repeat=len_ops_ex_opc))
-        res = self.gen_asm_case(valuefuncs)
-        return res
+        cases = self.gen_asm_case(valuefuncs)
+        return cases
 
     def gen_asm_random_case(self, repeat=1):
         len_ops_ex_opc = 0
@@ -230,11 +272,11 @@ class InstructionTest():
             if ast[0] == "$" and ast != "$opn":
                 len_ops_ex_opc += 1
         valuefuncs = [[TestOperand.rand] * len_ops_ex_opc] * repeat
-        res = self.gen_asm_case(valuefuncs)
-        return res
+        cases = self.gen_asm_case(valuefuncs)
+        return cases
 
     def gen_asm_case(self, valuefuncs):
-        res = []
+        cases = []
         for vfi in range(len(valuefuncs)):
             self.instr.decode(self.instr.opc)
             asm = ""
@@ -250,22 +292,23 @@ class InstructionTest():
                         param = self.instr.params.outputs[label]
                         top = TestOperand(tp, param, self.isa)
                         tparam = valuefuncs[vfi][opi_ex_opc](top)
-                        asm += self.isa.param_str(tparam)
+                        asm += self.isa.param_str(tparam, alias=self.reg_alias)
                     elif label in self.instr.params.inputs:
                         tp = self.instr.prm.inputs[label]
                         param = self.instr.params.inputs[label]
                         top = TestOperand(tp, param, self.isa)
                         tparam = valuefuncs[vfi][opi_ex_opc](top)
-                        asm += self.isa.param_str(tparam)
+                        asm += self.isa.param_str(tparam, alias=self.reg_alias)
                     else:
                         asm += "#" + ast
                     funcstr = "{}:{}".format(
                         ast,
-                        valuefuncs[vfi][opi_ex_opc].__name__,
+                        # valuefuncs[vfi][opi_ex_opc].__name__,
+                        valuefuncs[vfi][opi_ex_opc].__doc__,
                     )
                     opi_ex_opc += 1
                     funcstrs.append(funcstr)
                 else:
                     asm += ast
-            res.append({'asm': asm, 'func': funcstrs})
-        return res
+            cases.append({'asm': asm, 'func': funcstrs})
+        return cases
