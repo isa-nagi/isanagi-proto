@@ -347,8 +347,8 @@ class LLVMCompiler():
                 reg_base_tables[reg_clsname].append(reg)
         reg_bases = []
         for name, regs in reg_base_tables.items():
-            if name == "Register":
-                continue
+            # if name == "Register":
+            #     continue
             max_no = max([r.number for r in regs])
             reg_bases.append(RegisterBase(
                 name=name,
