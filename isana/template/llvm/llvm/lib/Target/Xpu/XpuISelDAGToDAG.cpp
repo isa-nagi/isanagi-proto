@@ -94,7 +94,7 @@ bool {{ Xpu }}DAGToDAGISel::SelectAddrRegImm(
       Offset = CurDAG->getTargetConstant(CVal, DL, VT);
     } else {
       int64_t Lo = SignExtend64<12>(CVal);
-      int64_t Hi = (uint64_t)CVal - (uint64_t)Lo;
+      int64_t Hi = ((uint64_t)CVal - (uint64_t)Lo) >> 12;
       auto Lui = SDValue(CurDAG->getMachineNode({{ Xpu }}::LUI, DL, VT,
                                                 CurDAG->getTargetConstant(Hi, DL, VT)), 0);
       Base = SDValue(CurDAG->getMachineNode({{ Xpu }}::ADD, DL, VT, Addr.getOperand(0), Lui), 0);
@@ -112,7 +112,7 @@ bool {{ Xpu }}DAGToDAGISel::SelectAddrRegImm(
       Offset = CurDAG->getTargetConstant(CVal, DL, VT);
     } else {
       int64_t Lo = SignExtend64<12>(CVal);
-      int64_t Hi = (uint64_t)CVal - (uint64_t)Lo;
+      int64_t Hi = ((uint64_t)CVal - (uint64_t)Lo) >> 12;
       Base = SDValue(CurDAG->getMachineNode({{ Xpu }}::LUI, DL, VT,
                                             CurDAG->getTargetConstant(Hi, DL, VT)), 0);
       Offset = CurDAG->getTargetConstant(Lo, DL, VT);
