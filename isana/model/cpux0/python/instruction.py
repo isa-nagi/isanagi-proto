@@ -395,7 +395,7 @@ class jalr(InstrJ):
 
     def semantic(self, ctx, ins):
         ctx.GPR[14] = ctx.C0R.pc
-        ctx.C0R.pc += ctx.GPR[ins.rb]
+        ctx.C0R.pc = ctx.GPR[ins.rb]
 
 
 class bal(InstrJ):

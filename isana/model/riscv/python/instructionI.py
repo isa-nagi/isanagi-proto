@@ -44,9 +44,6 @@ class jal(InstrJ):
     def is_jump(self):
         return self.params.outputs['rd'].number == 0
 
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
-
 
 class jalr(InstrI):
     opn, opc = "jalr", 0b000000000000_00000_000_00000_1100111
@@ -85,9 +82,6 @@ class beq(InstrB):
         if cond:
             ctx.PCR.pc += ins.imm
 
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
-
 
 class bne(InstrB):
     opn, opc = "bne", 0b0000000_00000_00000_001_00000_1100011
@@ -97,9 +91,6 @@ class bne(InstrB):
         cond = ctx.GPR[ins.rs1] != ctx.GPR[ins.rs2]
         if cond:
             ctx.PCR.pc += ins.imm
-
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
 
 
 class blt(InstrB):
@@ -111,9 +102,6 @@ class blt(InstrB):
         if cond:
             ctx.PCR.pc += ins.imm
 
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
-
 
 class bge(InstrB):
     opn, opc = "bge", 0b0000000_00000_00000_101_00000_1100011
@@ -123,9 +111,6 @@ class bge(InstrB):
         cond = ctx.GPR[ins.rs1] >= ctx.GPR[ins.rs2]
         if cond:
             ctx.PCR.pc += ins.imm
-
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
 
 
 class bltu(InstrB):
@@ -137,9 +122,6 @@ class bltu(InstrB):
         if cond:
             ctx.PCR.pc += ins.imm
 
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
-
 
 class bgeu(InstrB):
     opn, opc = "bgeu", 0b0000000_00000_00000_111_00000_1100011
@@ -149,9 +131,6 @@ class bgeu(InstrB):
         cond = unsigned(xlen, ctx.GPR[ins.rs1]) >= unsigned(xlen, ctx.GPR[ins.rs2])
         if cond:
             ctx.PCR.pc += ins.imm
-
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
 
 
 class lb(InstrILoad):

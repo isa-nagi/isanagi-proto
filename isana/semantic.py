@@ -1,7 +1,6 @@
 import ast
 import inspect
 from textwrap import dedent
-from isana.isa import unsigned
 
 
 op_alu_table = {
@@ -258,6 +257,7 @@ def may_take_memory_address(semantic):
 
 
 def get_alu_dag(semantic):
+    def unsigned(): pass
     def imm_term_semantic(self, ctx, ins):
         # ins.PickAny
         ins.Pick

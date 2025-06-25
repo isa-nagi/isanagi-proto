@@ -114,9 +114,6 @@ class c_jal(InstrCJ):
         ctx.GPR[1] = ctx.PCR.pc + 4
         ctx.PCR.pc += ins.imm
 
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
-
 
 class c_addiw(InstrCI):
     opn, opc = "c.addiw", 0b001_0_00000_00000_01
@@ -199,9 +196,6 @@ class c_j(InstrCJ):
     def semantic(self, ctx, ins):
         ctx.PCR.pc += ins.imm
 
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
-
 
 class c_beqz(InstrCBBranch):
     opn, opc = "c.beqz", 0b110_000_000_00000_01
@@ -215,9 +209,6 @@ class c_beqz(InstrCBBranch):
         if cond:
             ctx.PCR.pc += ins.imm
 
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
-
 
 class c_bnez(InstrCBBranch):
     opn, opc = "c.bnez", 0b111_000_000_00000_01
@@ -230,9 +221,6 @@ class c_bnez(InstrCBBranch):
         cond = ctx.GPR[ins.rdrs1] != 0
         if cond:
             ctx.PCR.pc += ins.imm
-
-    def target_addr(self):
-        return self.addr + self.params.inputs['imm'].value
 
 
 class c_slli(InstrCI):

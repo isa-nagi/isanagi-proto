@@ -296,7 +296,6 @@ class LLVMCompiler():
 
     def __init__(self, isa):
         self.isa = isa
-        self.isa.new_context()
         self.outdir = "out"
         self._prepare_processorinfo()
 

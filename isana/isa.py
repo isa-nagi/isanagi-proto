@@ -3,6 +3,10 @@ import importlib.util
 import os
 import re
 import sys
+from isana.semantic import (
+    may_change_pc_absolute,
+    may_change_pc_relative,
+)
 
 
 class Bits():
@@ -109,6 +113,8 @@ class ISA():
             setattr(self, key, value)
 
         # init after all argument set
+        self.new_context()
+        self._autofill_instructions_attribute()
         if (type(self._compiler) is type(object)):
             self._compiler = self._compiler(self)
 
@@ -222,6 +228,27 @@ class ISA():
         self._ctx.pre_semantic()
         ins.semantic(self._ctx, ins)
         self._ctx.post_semantic(ins)
+
+    def _autofill_instructions_attribute(self):
+        for instr_cls in self.instructions:
+            instr = instr_cls()
+            instr.isa = self
+            instr.decode(instr.opc)
+            if m := may_change_pc_absolute(instr):
+                expr = m
+                expr = re.sub(r'ins\.(\w+)', r'self.params.inputs["\1"]', expr)
+                # print("A", f'"{m}"', f'"{expr}"', instr)
+                # [TODO] implement target_addr() for pc-absolute
+            elif m := may_change_pc_relative(instr):
+                expr = m
+                expr = re.sub(r'ins\.(\w+)', r'self.params.inputs["\1"].value', expr)
+                expr = f'self.addr + {expr}'
+                # print("R", f'"{m}"', f'"{expr}"', instr)
+                def new_target_addr(expr):
+                    def target_addr(self):
+                        return eval(expr)
+                    return target_addr
+                instr_cls.target_addr = new_target_addr(expr)
 
 
 class Context():
