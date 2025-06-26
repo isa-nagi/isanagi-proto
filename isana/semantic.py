@@ -494,3 +494,124 @@ def estimate_load_immediate_dag(isa):
         imm, signed = immx
         xforms.append(_gen_sdnodexform(imm, signed))
     return xforms, dags
+
+
+def estimate_add_immediate_buildmi(isa):
+    def get_cond(imm):
+        cond = "!(Amount & {mask}) && ({minv} <= (Amount>>{shift})) && ((Amount>>{shift}) <= {maxv})".format(
+            mask=int(pow(2, imm.offset) - 1),
+            shift=imm.offset,
+            minv=-int(pow(2, imm.width)),
+            maxv=int(pow(2, imm.width) - 1),
+        )
+        return cond
+
+    li_ops = estimate_load_immediate_ops(isa)
+    (li32, li_s, lui_s, addi_s, lui_addi_s) = li_ops
+    codes = list()
+    for ops in li_s + lui_s + addi_s + (li32,):
+        vardefs = []
+        buildmis = []
+        if isinstance(ops[0], tuple):
+            lui_op, lui_imm = ops[0]
+            lui_opname = lui_op.opn.upper()
+            addi_op, addi_imm = ops[1]
+            addi_opname = addi_op.opn.upper()
+            # lui
+            vardef = "Register TempReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
+            vardefs.append(vardef)
+            vardef = "Register ImmReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
+            vardefs.append(vardef)
+            if hasattr(addi_imm, "signed"):
+                vardef = "int64_t Hi = ((Amount + {half}) >> {shift}) & {mask};".format(
+                    half=2 ** (lui_imm.offset - 1),
+                    shift=lui_imm.offset,
+                    mask=2 ** lui_imm.width - 1,
+                )
+            else:
+                vardef = "int64_t Hi = ((Amount >> {shift})) & {mask};".format(
+                    shift=lui_imm.offset,
+                    mask=2 ** lui_imm.width - 1,
+                )
+            vardefs.append(vardef)
+            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{lui_opname}), TempReg)"
+            for param in lui_op.params.inputs.values():
+                if isa.is_imm_type(param.type_):
+                    buildmi += ".addImm(Hi)"
+                else:
+                    buildmi += f"/*{param} {param.type_}*/ "
+            buildmi += ";"
+            buildmis.append(buildmi)
+            # addi
+            vardef = "int64_t Lo = Amount & {mask};".format(
+                mask=2 ** addi_imm.width - 1,
+            )
+            vardefs.append(vardef)
+            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{addi_opname}), ImmReg)"
+            for param in addi_op.params.inputs.values():
+                if isa.is_reg_type(param.type_):
+                    buildmi += ".addReg(TempReg, RegState::Kill)"
+                elif isa.is_imm_type(param.type_):
+                    buildmi += ".addImm(Lo)"
+                else:
+                    buildmi += f"/*{param} {param.type_}*/ "
+            buildmi += ";"
+            buildmis.append(buildmi)
+            # add
+            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::ADD), DstReg)"
+            buildmi += ".addReg(SrcReg)"
+            buildmi += ".addReg(ImmReg, RegState::Kill)"
+            buildmi += ";"
+            buildmis.append(buildmi)
+
+            cond = f"else"
+            codes.append((cond, vardefs, buildmis))
+        else:
+            op, imm = ops
+            cond = get_cond(imm)
+            cond = f"if (/*{imm.label}*/ {cond})"
+            if len(codes) > 0:
+                cond = "else " + cond
+            opname = op.opn.upper()
+            if ops in li_s or ops in lui_s:
+                # l[u]i : l[u]i t, hi(amount); add dst, src, t
+                vardef = "Register TempReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
+                vardefs.append(vardef)
+                if ops in lui_s:
+                    vardef = "int64_t Hi = ((Amount >> {shift})) & {mask};".format(
+                        shift=imm.offset,
+                        mask=2 ** imm.width - 1,
+                    )
+                    vardefs.append(vardef)
+                # l[u]i
+                buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), TempReg)"
+                for param in op.params.inputs.values():
+                    if isa.is_imm_type(param.type_):
+                        if ops in lui_s:
+                            buildmi += ".addImm(Hi)"
+                        else:
+                            buildmi += ".addImm(Amount)"
+                    else:
+                        buildmi += f"/*{param} {param.type_}*/ "
+                buildmi += ";"
+                # add
+                buildmis.append(buildmi)
+                buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::ADD), DstReg)"
+                buildmi += ".addReg(SrcReg)"
+                buildmi += ".addReg(TempReg)"
+                buildmi += ";"
+                buildmis.append(buildmi)
+            else:
+                # addi  : addi dst, src, amount;
+                buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), DstReg)"
+                for param in op.params.inputs.values():
+                    if isa.is_reg_type(param.type_):
+                        buildmi += ".addReg(SrcReg)"
+                    elif isa.is_imm_type(param.type_):
+                        buildmi += ".addImm(Amount)"
+                    else:
+                        buildmi += f"/*{param} {param.type_}*/ "
+                buildmi += ";"
+                buildmis.append(buildmi)
+            codes.append((cond, vardefs, buildmis))
+    return codes

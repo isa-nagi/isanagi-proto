@@ -4,37 +4,37 @@ from isana.isa import unsigned
 
 
 class InstrA(Instruction):
-    prm = parameter("ra:GPR", "rb:GRP, rc:GPR, cx:ImmS12")
+    prm = parameter("ra:GPR", "rb:GPR, rc:GPR, cx:ImmS12")
     asm = assembly("$opn $ra, $rb, $rc, $cx")
     bin = binary("$opc[31:24], $ra[3:0], $rb[3:0], $rc[3:0], $cx[11:0]")
 
 
 class InstrArrr(Instruction):
-    prm = parameter("ra:GPR", "rb:GRP, rc:GPR")
+    prm = parameter("ra:GPR", "rb:GPR, rc:GPR")
     asm = assembly("$opn $ra, $rb, $rc")
     bin = binary("$opc[31:24], $ra[3:0], $rb[3:0], $rc[3:0], $opc[11:0]")
 
 
 class InstrArr(Instruction):
-    prm = parameter("ra:GPR", "rb:GRP")
+    prm = parameter("ra:GPR", "rb:GPR")
     asm = assembly("$opn $ra, $rb")
     bin = binary("$opc[31:24], $ra[3:0], $rb[3:0], $opc[15:12], $opc[11:0]")
 
 
 class InstrArri(Instruction):
-    prm = parameter("ra:GPR", "rb:GRP, cx:ImmS16")
+    prm = parameter("ra:GPR", "rb:GPR, cx:ImmS16")
     asm = assembly("$opn $ra, $rb, $cx")
     bin = binary("$opc[31:24], $ra[3:0], $rb[3:0], $cx[15:0]")
 
 
 class InstrAssrr(Instruction):
-    prm = parameter("hi:SPR, lo:SPR", "ra:GPR, rb:GRP")
+    prm = parameter("hi:SPR, lo:SPR", "ra:GPR, rb:GPR")
     asm = assembly("$opn $ra, $rb")
     bin = binary("$opc[31:24], $ra[3:0], $rb[3:0], $opc[15:12], $opc[11:0]")
 
 
 class InstrL(Instruction):
-    prm = parameter("ra:GPR", "rb:GRP, cx:ImmS16")
+    prm = parameter("ra:GPR", "rb:GPR, cx:ImmS16")
     asm = assembly("$opn $ra, $rb, $cx")
     bin = binary("$opc[31:24], $ra[3:0], $rb[3:0], $cx[15:0]")
 
@@ -125,6 +125,7 @@ class sh(InstrL):
 
 
 class addiu(InstrL):
+    prm = parameter("ra:GPR", "rb:GPR, cx:ImmU16")
     opn, opc = "ADDiu", 0b00001001_0000_0000_0000000000000000
 
     def semantic(self, ctx, ins):

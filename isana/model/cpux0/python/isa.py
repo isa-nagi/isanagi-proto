@@ -3,7 +3,7 @@ from isana.isa import Context
 
 from .memory import Mem
 from .register import GPR, SR, C0R, SPR
-from .datatype import Imm, ImmS12, ImmS16, ImmS16O16, ImmS24
+from .datatype import Imm, ImmS12, ImmS16, ImmU16, ImmS16O16, ImmS24
 from .instruction import instructions
 
 from .compiler import compiler
@@ -45,6 +45,7 @@ isa = CpuX0ISA(
         Imm,
         ImmS12,
         ImmS16,
+        ImmU16,
         ImmS16O16,
         ImmS24,
     ),

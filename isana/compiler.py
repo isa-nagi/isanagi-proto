@@ -8,6 +8,7 @@ from isana.semantic import (
     may_take_memory_address,
     get_alu_dag,
     estimate_load_immediate_dag,
+    estimate_add_immediate_buildmi,
 )
 from isana.isa import (
     Immediate,
@@ -697,6 +698,14 @@ class LLVMCompiler():
             if instr_alias:
                 instr_aliases.append(instr_alias)
 
+        # llvm/lib/Target/Xpu/XpuInstrInfo.cpp
+        _buildmi_addimm = estimate_add_immediate_buildmi(self.isa)
+        buildmi_addimm = []
+        for cond, vardefs, buildmis in _buildmi_addimm:
+            vardefs = (var.format(Xpu=self.namespace) for var in vardefs)
+            buildmis = (bmi.format(Xpu=self.namespace) for bmi in buildmis)
+            buildmi_addimm.append((cond, vardefs, buildmis))
+
         kwargs = {
             "asm_operand_clss": asm_operand_clss,
             "operand_clss": operand_clss,
@@ -719,6 +728,8 @@ class LLVMCompiler():
             "fixup_relocs": fixup_relocs,
 
             "instr_aliases": instr_aliases,
+
+            "buildmi_addimm": buildmi_addimm,
         }
         return kwargs
 

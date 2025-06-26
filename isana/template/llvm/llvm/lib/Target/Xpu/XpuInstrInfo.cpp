@@ -56,29 +56,17 @@ void
   MachineBasicBlock::iterator MBBI
 ) const {
   DebugLoc DL = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
+  MachineFunction *MF = MBB.getParent();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
 
-  if (isInt<12>(Amount)) {
-    BuildMI(MBB, MBBI, DL, get({{ Xpu }}::ADDI), DstReg)
-      .addReg(SrcReg)
-      .addImm(Amount);
-  } else {
-    MachineFunction *MF = MBB.getParent();
-    MachineRegisterInfo &MRI = MF->getRegInfo();
-
-    Register TempReg = MRI.createVirtualRegister(&{{ Xpu }}::GPRRegClass);
-    Register ImmReg = MRI.createVirtualRegister(&{{ Xpu }}::GPRRegClass);
-    int64_t Lo12 = SignExtend64<12>(Amount);
-    int64_t Hi20 = ((Amount - Lo12) >> 12);
-
-    BuildMI(MBB, MBBI, DL, get({{ Xpu }}::LUI), TempReg)
-      .addImm(Hi20);
-    BuildMI(MBB, MBBI, DL, get({{ Xpu }}::ADDI), ImmReg)
-      .addReg(TempReg, RegState::Kill)
-      .addImm(Lo12);
-    BuildMI(MBB, MBBI, DL, get({{ Xpu }}::ADD), DstReg)
-      .addReg(SrcReg)
-      .addReg(ImmReg, RegState::Kill);
-  }
+  {% for cond, vardefs, buildmis in buildmi_addimm -%}
+  {{ cond }} {
+  {%- for vardef in vardefs %}
+    {{ vardef }}
+  {%- endfor %}
+  {%- for buildmi in buildmis %}
+    {{ buildmi }}{%- endfor %}
+  } {%- endfor %}
 }
 
 void
