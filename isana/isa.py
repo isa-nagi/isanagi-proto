@@ -102,7 +102,7 @@ class ISA():
         for instr in instructions:
             if isinstance(instr, (InstructionAlias, PseudoInstruction)):
                 self.instruction_aliases.append(instr)
-            elif isinstance(instr, unknown_op):
+            elif issubclass(instr, unknown_op):
                 self.unknown_instructions.append(instr)
             else:
                 self.instructions.append(instr)
