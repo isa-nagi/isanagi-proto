@@ -1,4 +1,4 @@
-from isana.isa import assembly
+from isana.isa import parameter, assembly, binary
 from isana.isa import signed, unsigned
 
 from .defs import xlen
@@ -6,7 +6,7 @@ from .defs import xlen
 # from .register import GPR, GPRC, CSR, PCR
 from .instructionType import (
     InstrR,
-    InstrI, InstrIShift, InstrIShift64, InstrILoad, InstrIFence,
+    InstrIJalr, InstrIAlu, InstrIShift, InstrIShift64, InstrILoad, InstrIFence,
     InstrS,
     InstrB,
     InstrU,
@@ -45,7 +45,7 @@ class jal(InstrJ):
         return self.params.outputs['rd'].number == 0
 
 
-class jalr(InstrI):
+class jalr(InstrIJalr):
     opn, opc = "jalr", 0b000000000000_00000_000_00000_1100111
     is_indirect = True
 
@@ -262,42 +262,42 @@ class sw(InstrS):
         return self.params.inputs['rs1'].number == 2
 
 
-class addi(InstrI):
+class addi(InstrIAlu):
     opn, opc = "addi", 0b000000000000_00000_000_00000_0010011
 
     def semantic(self, ctx, ins):
         ctx.GPR[ins.rd] = ctx.GPR[ins.rs1] + ins.imm
 
 
-class slti(InstrI):
+class slti(InstrIAlu):
     opn, opc = "slti", 0b000000000000_00000_010_00000_0010011
 
     def semantic(self, ctx, ins):
         ctx.GPR[ins.rd] = ctx.GPR[ins.rs1] < ins.imm
 
 
-class sltiu(InstrI):
+class sltiu(InstrIAlu):
     opn, opc = "sltiu", 0b000000000000_00000_011_00000_0010011
 
     def semantic(self, ctx, ins):
         ctx.GPR[ins.rd] = unsigned(xlen, ctx.GPR[ins.rs1]) < unsigned(xlen, ins.imm)
 
 
-class xori(InstrI):
+class xori(InstrIAlu):
     opn, opc = "xori", 0b000000000000_00000_100_00000_0010011
 
     def semantic(self, ctx, ins):
         ctx.GPR[ins.rd] = ctx.GPR[ins.rs1] ^ ins.imm
 
 
-class ori(InstrI):
+class ori(InstrIAlu):
     opn, opc = "ori", 0b000000000000_00000_110_00000_0010011
 
     def semantic(self, ctx, ins):
         ctx.GPR[ins.rd] = ctx.GPR[ins.rs1] | ins.imm
 
 
-class andi(InstrI):
+class andi(InstrIAlu):
     opn, opc = "andi", 0b000000000000_00000_111_00000_0010011
 
     def semantic(self, ctx, ins):
@@ -399,7 +399,10 @@ class fence(InstrIFence):
     opn, opc = "fence", 0b0000_0000_0000_00000_000_00000_0001111
 
 
-class fence_tso(InstrO):
+class fence_tso(InstrIFence):
+    prm = parameter("", "")
+    asm = assembly("$opn")
+    bin = binary("$opc[31:0]")
     opn, opc = "fence.tso", 0b1000_0011_0011_00000_000_00000_0001111
 
 
@@ -480,7 +483,7 @@ class srai64(InstrIShift64):
         ctx.GPR[ins.rd] = ctx.GPR[ins.rs1] >> ins.imm
 
 
-class addiw(InstrI):
+class addiw(InstrIAlu):
     opn, opc = "addiw", 0b000000000000_00000_000_00000_0011011
 
     def semantic(self, ctx, ins):

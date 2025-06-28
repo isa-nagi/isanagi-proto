@@ -115,6 +115,8 @@ class ISA():
         # init after all argument set
         self.new_context()
         self._autofill_instructions_attribute()
+        self._make_instruction_tree()
+        self._make_decoder()
         if (type(self._compiler) is type(object)):
             self._compiler = self._compiler(self)
 
@@ -193,7 +195,7 @@ class ISA():
     def decode(self, data: bytes, addr: int | None = None):
         return self._decode0(data, addr=addr)
 
-    def _decode0(self, data: bytes, addr: int | None = None):
+    def _decode_simple(self, data: bytes, addr: int | None = None):
         # simple opecode match
         instr = None
         for instr0 in self.instructions + self.unknown_instructions:
@@ -210,6 +212,8 @@ class ISA():
             instr.isa = self
         instr.decode(value, addr=addr)
         return instr
+
+    _decode0 = _decode_simple
 
     def new_context(self):
         ctx = self.context(
@@ -249,6 +253,157 @@ class ISA():
                         return eval(expr)
                     return target_addr
                 instr_cls.target_addr = new_target_addr(expr)
+
+    def _make_instruction_tree(self):
+        done = list()
+        rest = self.instructions[:]
+        instr_tree = {instr: InstructionTree(instr) for instr in rest}
+        while rest:
+            instr = rest.pop(0)
+            parent = instr.__bases__[0]
+            instr_tree.setdefault(parent, InstructionTree(parent))
+            instr_tree[instr].parent = instr_tree[parent]
+            if instr_tree[instr] not in instr_tree[parent].children:
+                instr_tree[parent].children.append(instr_tree[instr])
+            done.append(instr)
+            if parent not in done and parent != object:
+                rest.append(parent)
+        root = instr_tree[Instruction]
+        root.parent = None
+        self.instruction_tree = root
+
+    def _walk_instruction_tree_by_depth(self):
+        pass
+        def _walk(node, visited):
+            visited.append(node)
+            yield node, True  # go foward
+            for child in node.children:
+                if child not in visited:
+                    for _ in _walk(child, visited): yield _  # noqa
+            yield node, False  # go back
+
+        # rest = self.instruction_tree.children[:]
+        rest = [self.instruction_tree]
+        visited = []
+        while len(rest) > 0:
+            first = rest[0]
+            for _ in _walk(first, visited): yield _  # noqa
+            for f in visited:
+                if f in rest:
+                    rest.remove(f)
+
+    def _make_decoder(self):
+        for node, gofoward in self._walk_instruction_tree_by_depth():
+            depth = 0
+            depth += 1 if gofoward else - 1
+            node.depth = depth
+            if node.instr == Instruction:
+                continue
+            instr = node.instr()
+            if gofoward:
+                pattern = ''
+                bits_sum = 0
+                if instr.opc is None:
+                    node.pattern = 'X' * instr.bitsize
+                    continue
+                for bits in reversed(instr.bin.bitss):
+                    if bits.label == "$opc":
+                        bits_value = (instr.opc >> bits_sum) & (2 ** (bits.size()) - 1)
+                        for bi in range(bits.size()):
+                            bit = bits_value & 1
+                            pattern += str(bit)
+                            bits_value >>= 1
+                    else:
+                        pattern += '*' * bits.size()
+                    bits_sum += bits.size()
+                node.pattern = pattern[::-1]
+            else:
+                instr = node.instr()
+                n_ptn = node.pattern
+                p_ptn = node.parent.pattern
+                max_bits = max(len(n_ptn), len(p_ptn))
+                if not p_ptn:
+                    p_ptn = 'X' * max_bits
+                if len(p_ptn) < len(n_ptn):
+                    p_ptn = 'X' * (len(n_ptn) - len(p_ptn)) + p_ptn
+                if len(n_ptn) < len(p_ptn):
+                    n_ptn = '*' * (len(p_ptn) - len(n_ptn)) + n_ptn
+                new_p_ptn = ''
+                for i in range(max_bits):
+                    if p_ptn[i] == 'X':
+                        new_p_ptn += n_ptn[i]
+                    else:
+                        if n_ptn[i] == '*':
+                            new_p_ptn += '*'
+                        elif p_ptn[i] != n_ptn[i]:
+                            new_p_ptn += '*'
+                        else:
+                            new_p_ptn += p_ptn[i]
+                node.parent.pattern = new_p_ptn
+                mask = 0
+                value = 0
+                for i, s in enumerate(node.pattern[::-1]):
+                    bit = 2 ** i
+                    if s != '*':
+                        mask += bit
+                    if s == '1':
+                        value += bit
+                node.pattern_mask = mask
+                node.pattern_value = value
+        # check duplicates
+        # depth = 0
+        # for node, gofoward in self._walk_instruction_tree_by_depth():
+        #     depth += 1 if gofoward else - 1
+        #     if gofoward and depth <= 3:
+        #         print('{:4s}{:15s} {:>32s} {:032b} {:032b}'.format(
+        #             '+' * depth,
+        #             node.instr.__name__,
+        #             node.pattern,
+        #             node.pattern_mask,
+        #             node.pattern_value,
+        #         ))
+        self._decode0 = self._decode_tree
+
+    def _decode_tree(self, data: bytes, addr: int | None = None):
+        ranks = list()
+        ranks.append(self.instruction_tree.children[:])
+        instr = None
+        while True:
+            if len(ranks) == 0:
+                break
+            nodes = ranks[-1]
+            if len(nodes) == 0:
+                ranks.pop()
+                continue
+            node = nodes.pop(0)
+            instr0 = node.instr()
+            value0 = instr0.value_swap_endian(data, self.endian)
+            instr0.isa = self
+            if len(node.children) > 0:
+                if not node.match_value(value0):
+                    continue
+                ranks.append(node.children[:])
+                continue
+            else:
+                if instr0.match_opecode(value0):
+                    instr = instr0
+                    value = value0
+                    break
+        if instr is None:
+            for instr0 in self.unknown_instructions:
+                instr0 = instr0()
+                value0 = instr0.value_swap_endian(data, self.endian)
+                instr0.isa = self
+                if instr0.match_opecode(value0):
+                    instr = instr0
+                    value = value0
+                    break
+            else:
+                instr = unknown_op()
+                value = int.from_bytes(data, byteorder=self.endian)
+                instr.isa = self
+        instr.decode(value, addr=addr)
+        return instr
 
 
 class Context():
@@ -627,6 +782,32 @@ class Instruction():
 
 class unknown_op(Instruction):
     opn = "unknown_op"
+
+
+class InstructionTree():
+    def __init__(self, instr):
+        self.instr = instr
+        self.parent = None
+        self.children = list()
+        self.depth = -1
+        self.pattern = ''
+        self.pattern_mask = int()
+        self.pattern_value = int()
+
+    def __str__(self):
+        return '{}({})'.format(
+            self.__class__.__name__,
+            self.instr.__name__,
+        )
+
+    def __repr__(self):
+        return self.__str__()
+
+    def match_value(self, value):
+        masked_value = value & self.pattern_mask
+        if masked_value == self.pattern_value:
+            return True
+        return False
 
 
 class InstructionParameters():

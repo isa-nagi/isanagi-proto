@@ -20,29 +20,43 @@ class InstrR2(Instruction):
     bin = binary("$opc[31:25], $opc[24:20], $rs1[4:0], $opc[14:12], $rd[4:0], $opc[6:0]")
 
 
-class InstrI(Instruction):
+class InstrIJalr(Instruction):
     prm = parameter("rd:GPR", "rs1:GPR, imm:ImmS12")
     asm = assembly("$opn $rd, $rs1, $imm")
     bin = binary("$imm[11:0], $rs1[4:0], $opc[14:12], $rd[4:0], $opc[6:0]")
 
 
-class InstrIShift(InstrI):
+class InstrIAlu(Instruction):
+    prm = parameter("rd:GPR", "rs1:GPR, imm:ImmS12")
+    asm = assembly("$opn $rd, $rs1, $imm")
+    bin = binary("$imm[11:0], $rs1[4:0], $opc[14:12], $rd[4:0], $opc[6:0]")
+
+
+class InstrIFencei(Instruction):
+    prm = parameter("rd:GPR", "rs1:GPR, imm:ImmS12")
+    asm = assembly("$opn $rd, $rs1, $imm")
+    bin = binary("$imm[11:0], $rs1[4:0], $opc[14:12], $rd[4:0], $opc[6:0]")
+
+
+class InstrIShift(Instruction):
     prm = parameter("rd:GPR", "rs1:GPR, imm:Imm")
     asm = assembly("$opn $rd, $rs1, $imm")
     bin = binary("$opc[31:25], $imm[4:0], $rs1[4:0], $opc[14:12], $rd[4:0], $opc[6:0]")
 
 
-class InstrIShift64(InstrI):
+class InstrIShift64(Instruction):
     prm = parameter("rd:GPR", "rs1:GPR, imm:Imm")
     asm = assembly("$opn $rd, $rs1, $imm")
     bin = binary("$opc[31:26], $imm[5:0], $rs1[4:0], $opc[14:12], $rd[4:0], $opc[6:0]")
 
 
-class InstrILoad(InstrI):
+class InstrILoad(Instruction):
+    prm = parameter("rd:GPR", "rs1:GPR, imm:ImmS12")
     asm = assembly("$opn $rd, $imm ($rs1)")
+    bin = binary("$imm[11:0], $rs1[4:0], $opc[14:12], $rd[4:0], $opc[6:0]")
 
 
-class InstrIFence(InstrI):
+class InstrIFence(Instruction):
     prm = parameter("", "pred:ImmU4, succ:ImmU4")
     asm = assembly("$opn $pred, $succ")
     bin = binary("$opc[31:28], $pred[3:0], $succ[3:0], $opc[19:0]")
@@ -97,7 +111,13 @@ class InstrCR(Instruction):
     bin = binary("$opc[15:12], $rdrs1[4:0], $rs2[4:0], $opc[1:0]")
 
 
-class InstrCI(Instruction):
+class InstrCI01(Instruction):
+    prm = parameter("rdrs1:GPR", "imm:ImmS6")
+    asm = assembly("$opn $rdrs1, $imm")
+    bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:0], $opc[1:0]")
+
+
+class InstrCI10(Instruction):
     prm = parameter("rdrs1:GPR", "imm:ImmS6")
     asm = assembly("$opn $rdrs1, $imm")
     bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:0], $opc[1:0]")
@@ -148,7 +168,7 @@ class InstrCBBranch(Instruction):
 class InstrCJ(Instruction):
     prm = parameter("", "imm:ImmS12")
     asm = assembly("$opn $imm")
-    bin = binary("$opc[15:13], $imm[11:0], $opc[1:0]")
+    bin = binary("$opc[15:13], $imm[10:0], $opc[1:0]")
 
 
 class InstrCLB(Instruction):
