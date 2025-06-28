@@ -211,9 +211,9 @@ def may_change_pc_absolute(instr):
 
 def may_change_pc_relative(instr):
     def pcrel1_semantic(self, ctx, ins):
-        PickAny = PickAny + PickAny
+        PickAny = PickAny + PickAny  # noqa
     def pcrel2_semantic(self, ctx, ins):
-        PickAny += PickAny
+        PickAny += PickAny  # noqa
 
     semantic = instr.semantic
     if m := _search_ast(semantic, pcrel1_semantic):
@@ -257,7 +257,8 @@ def may_take_memory_address(semantic):
 
 
 def get_alu_dag(semantic):
-    def unsigned(): pass
+    def unsigned():
+        pass
     def imm_term_semantic(self, ctx, ins):
         # ins.PickAny
         ins.Pick
@@ -496,7 +497,7 @@ def estimate_load_immediate_dag(isa):
     return xforms, dags
 
 
-def estimate_add_immediate_buildmi(isa):
+def estimate_add_immediate_codes(isa):
     def get_cond(imm):
         cond = "!(Amount & {mask}) && ({minv} <= (Amount>>{shift})) && ((Amount>>{shift}) <= {maxv})".format(
             mask=int(pow(2, imm.offset) - 1),
@@ -558,13 +559,13 @@ def estimate_add_immediate_buildmi(isa):
             buildmi += ";"
             buildmis.append(buildmi)
             # add
-            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::ADD), DstReg)"
+            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::ADD), DstReg)"  # noqa
             buildmi += ".addReg(SrcReg)"
             buildmi += ".addReg(ImmReg, RegState::Kill)"
             buildmi += ";"
             buildmis.append(buildmi)
 
-            cond = f"else"
+            cond = "else"
             codes.append((cond, vardefs, buildmis))
         else:
             op, imm = ops
@@ -596,7 +597,7 @@ def estimate_add_immediate_buildmi(isa):
                 buildmi += ";"
                 # add
                 buildmis.append(buildmi)
-                buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::ADD), DstReg)"
+                buildmi = "BuildMI(MBB, MBBI, DL, get({Xpu}::ADD), DstReg)"
                 buildmi += ".addReg(SrcReg)"
                 buildmi += ".addReg(TempReg)"
                 buildmi += ";"
@@ -614,4 +615,67 @@ def estimate_add_immediate_buildmi(isa):
                 buildmi += ";"
                 buildmis.append(buildmi)
             codes.append((cond, vardefs, buildmis))
+    return codes
+
+
+def estimate_selectaddr_codes(isa, has_addr):
+    def get_cond(imm):
+        cond = "!(CVal & {mask}) && ({minv} <= (CVal>>{shift})) && ((CVal>>{shift}) <= {maxv})".format(
+            mask=int(pow(2, imm.offset) - 1),
+            shift=imm.offset,
+            minv=-int(pow(2, imm.width)),
+            maxv=int(pow(2, imm.width) - 1),
+        )
+        return cond
+
+    li_ops = estimate_load_immediate_ops(isa)
+    (li32, li_s, lui_s, addi_s, lui_addi_s) = li_ops
+    codes = list()
+    for ops in addi_s + lui_addi_s:
+        vardefs = []
+        sdvalues = []
+        if isinstance(ops[0], tuple):
+            lui_op, lui_imm = ops[0]
+            addi_op, addi_imm = ops[1]
+            cond = "else"
+            vardef = "int64_t Lo = CVal & {mask};".format(
+                mask=2 ** addi_imm.width - 1,
+            )
+            vardefs.append(vardef)
+            vardef = "int64_t Hi = ((CVal >> {shift})) & {mask};".format(
+                shift=lui_imm.offset,
+                mask=2 ** lui_imm.width - 1,
+            )
+            vardefs.append(vardef)
+            sdvalue = ("auto Lui = SDValue(CurDAG->getMachineNode({Xpu}::LUI, DL, VT, "
+                       "CurDAG->getTargetConstant(Hi, DL, VT)), 0);")
+            sdvalues.append(sdvalue)
+            if has_addr:
+                sdvalue = ("Base = SDValue(CurDAG->getMachineNode({Xpu}::ADD, DL, VT, "
+                           "Addr.getOperand(0), Lui), 0);")
+                sdvalues.append(sdvalue)
+            else:
+                sdvalue = ("Base = Lui;")
+                sdvalues.append(sdvalue)
+            sdvalue = "Offset = CurDAG->getTargetConstant(Lo, DL, VT);"
+            sdvalues.append(sdvalue)
+            codes.append((cond, vardefs, sdvalues))
+        else:
+            op, imm = ops
+            cond = get_cond(imm)
+            cond = f"if (/*{imm.label}*/ {cond})"
+            if len(codes) > 0:
+                cond = "else " + cond
+            # addi  : addi dst, src, amount;
+            if has_addr:  # (add addr, imm) -> (addr, imm)
+                sdvalue = "Base = Addr.getOperand(0);"
+                sdvalues.append(sdvalue)
+                sdvalue = "Offset = CurDAG->getTargetConstant(CVal, DL, VT);"
+                sdvalues.append(sdvalue)
+            else:  # (imm) -> (zero, imm)
+                sdvalue = "Base = CurDAG->getRegister({Xpu}::{REG0}, VT);"
+                sdvalues.append(sdvalue)
+                sdvalue = "Offset = CurDAG->getTargetConstant(CVal, DL, VT);"
+                sdvalues.append(sdvalue)
+            codes.append((cond, vardefs, sdvalues))
     return codes

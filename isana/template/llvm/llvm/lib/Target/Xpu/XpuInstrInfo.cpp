@@ -59,7 +59,7 @@ void
   MachineFunction *MF = MBB.getParent();
   MachineRegisterInfo &MRI = MF->getRegInfo();
 
-  {% for cond, vardefs, buildmis in buildmi_addimm -%}
+  {% for cond, vardefs, buildmis in addimm_codes -%}
   {{ cond }} {
   {%- for vardef in vardefs %}
     {{ vardef }}

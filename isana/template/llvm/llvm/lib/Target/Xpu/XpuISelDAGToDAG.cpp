@@ -89,34 +89,28 @@ bool {{ Xpu }}DAGToDAGISel::SelectAddrRegImm(
   if (CurDAG->isBaseWithConstantOffset(Addr)) {
     // (add addr, imm) -> (addr, imm)
     int64_t CVal = cast<ConstantSDNode>(Addr.getOperand(1))->getSExtValue();
-    if (isInt<12>(CVal)) {
-      Base = Addr.getOperand(0);
-      Offset = CurDAG->getTargetConstant(CVal, DL, VT);
-    } else {
-      int64_t Lo = SignExtend64<12>(CVal);
-      int64_t Hi = ((uint64_t)CVal - (uint64_t)Lo) >> 12;
-      auto Lui = SDValue(CurDAG->getMachineNode({{ Xpu }}::LUI, DL, VT,
-                                                CurDAG->getTargetConstant(Hi, DL, VT)), 0);
-      Base = SDValue(CurDAG->getMachineNode({{ Xpu }}::ADD, DL, VT, Addr.getOperand(0), Lui), 0);
-      Offset = CurDAG->getTargetConstant(Lo, DL, VT);
-    }
+    {% for cond, vardefs, sdvalues in selectaddr_addr_imm_codes -%}
+    {{ cond }} {
+    {%- for vardef in vardefs %}
+      {{ vardef }}
+    {%- endfor %}
+    {%- for sdvalue in sdvalues %}
+      {{ sdvalue }}{%- endfor %}
+    } {%- endfor %}
     return true;
   }
 
     // (imm) -> (zero, imm)
   if (auto *C = dyn_cast<ConstantSDNode>(Addr)) {
     int64_t CVal = C->getZExtValue();
-    if (isInt<12>(CVal)) {
-      Base = CurDAG->getRegister({{ Xpu }}::X0, VT);
-      // Offset = Addr;
-      Offset = CurDAG->getTargetConstant(CVal, DL, VT);
-    } else {
-      int64_t Lo = SignExtend64<12>(CVal);
-      int64_t Hi = ((uint64_t)CVal - (uint64_t)Lo) >> 12;
-      Base = SDValue(CurDAG->getMachineNode({{ Xpu }}::LUI, DL, VT,
-                                            CurDAG->getTargetConstant(Hi, DL, VT)), 0);
-      Offset = CurDAG->getTargetConstant(Lo, DL, VT);
-    }
+    {% for cond, vardefs, sdvalues in selectaddr_imm_codes -%}
+    {{ cond }} {
+    {%- for vardef in vardefs %}
+      {{ vardef }}
+    {%- endfor %}
+    {%- for sdvalue in sdvalues %}
+      {{ sdvalue }}{%- endfor %}
+    } {%- endfor %}
     return true;
   }
 

@@ -8,7 +8,8 @@ from isana.semantic import (
     may_take_memory_address,
     get_alu_dag,
     estimate_load_immediate_dag,
-    estimate_add_immediate_buildmi,
+    estimate_add_immediate_codes,
+    estimate_selectaddr_codes,
 )
 from isana.isa import (
     Immediate,
@@ -335,6 +336,7 @@ class LLVMCompiler():
 
     def _prepare_processorinfo(self):
         reginfo = self._prepare_registerinfo()
+        self.kwargs = {**reginfo}
         instrinfo = self._prepare_instrinfo()
         self.kwargs = {**reginfo, **instrinfo}
 
@@ -406,12 +408,13 @@ class LLVMCompiler():
         ret_regs = []
         callee_saved_regs = []
         if gpr:
-            reg0 = gpr.regs[0].label.upper()
             for reg in gpr.regs:
                 if any([
                     reg.is_zero, reg.is_return_address, reg.is_stack_pointer, reg.is_global_pointer,
                 ]):
                     reserved_regs.append(reg.label.upper())
+                if reg0 is None and (reg.is_zero):
+                    reg0 = reg.label.upper()
                 if sp is None and (reg.is_stack_pointer):
                     sp = reg.label.upper()
                 if fp is None and (reg.is_frame_pointer):
@@ -699,12 +702,29 @@ class LLVMCompiler():
                 instr_aliases.append(instr_alias)
 
         # llvm/lib/Target/Xpu/XpuInstrInfo.cpp
-        _buildmi_addimm = estimate_add_immediate_buildmi(self.isa)
-        buildmi_addimm = []
-        for cond, vardefs, buildmis in _buildmi_addimm:
+        _codes = estimate_add_immediate_codes(self.isa)
+        addimm_codes = []
+        for cond, vardefs, buildmis in _codes:
             vardefs = (var.format(Xpu=self.namespace) for var in vardefs)
             buildmis = (bmi.format(Xpu=self.namespace) for bmi in buildmis)
-            buildmi_addimm.append((cond, vardefs, buildmis))
+            addimm_codes.append((cond, vardefs, buildmis))
+
+        # llvm/lib/Target/Xpu/XpuISelDAGToDAG.cpp
+        reg0 = self.kwargs['REG0']
+
+        _codes = estimate_selectaddr_codes(self.isa, has_addr=True)
+        selectaddr_addr_imm_codes = []
+        for cond, vardefs, sdvalues in _codes:
+            vardefs = (var.format(Xpu=self.namespace) for var in vardefs)
+            sdvalues = (bmi.format(Xpu=self.namespace) for bmi in sdvalues)
+            selectaddr_addr_imm_codes.append((cond, vardefs, sdvalues))
+
+        _codes = estimate_selectaddr_codes(self.isa, has_addr=False)
+        selectaddr_imm_codes = []
+        for cond, vardefs, sdvalues in _codes:
+            vardefs = (var.format(Xpu=self.namespace) for var in vardefs)
+            sdvalues = (bmi.format(Xpu=self.namespace, REG0=reg0) for bmi in sdvalues)
+            selectaddr_imm_codes.append((cond, vardefs, sdvalues))
 
         kwargs = {
             "asm_operand_clss": asm_operand_clss,
@@ -729,7 +749,10 @@ class LLVMCompiler():
 
             "instr_aliases": instr_aliases,
 
-            "buildmi_addimm": buildmi_addimm,
+            "addimm_codes": addimm_codes,
+
+            "selectaddr_addr_imm_codes": selectaddr_addr_imm_codes,
+            "selectaddr_imm_codes": selectaddr_imm_codes,
         }
         return kwargs
 
