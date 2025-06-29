@@ -83,10 +83,7 @@ void
   const TargetRegisterInfo *TRI = STI.getRegisterInfo();
 
   if ({{ Xpu }}::GPRRegClass.contains(DstReg, SrcReg)) {
-    BuildMI(MBB, MBBI, DL, get({{ Xpu }}::ADDI), DstReg)
-        .addReg(SrcReg,
-                getKillRegState(KillSrc) | getRenamableRegState(RenamableSrc))
-        .addImm(0);
+    {{ copy_reg_buildmi }}
     return;
   }
 }

@@ -388,6 +388,37 @@ def estimate_load_immediate_dag(isa, li_ops):
     return xforms, dags
 
 
+def estimate_copy_reg_buildmi(isa, mv_ops, addi_ops, add_ops, zeroreg):
+    for ops in mv_ops:
+        return ""
+    for ops in addi_ops:
+        op, imm = ops
+        opname = op.opn.upper()
+        buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), DstReg)"
+        for param in op.params.inputs.values():
+            if isa.is_reg_type(param.type_):
+                buildmi += ".addReg(SrcReg, getKillRegState(KillSrc) | getRenamableRegState(RenamableSrc))"
+            elif isa.is_imm_type(param.type_):
+                buildmi += ".addImm(0)"
+            else:
+                buildmi += f"/*{param} {param.type_}*/ "
+        buildmi += ";"
+        return buildmi
+    for ops in add_ops:
+        op, imm = ops
+        opname = op.opn.upper()
+        buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), DstReg)"
+        for param in op.params.inputs.values():
+            if isa.is_reg_type(param.type_):
+                buildmi += ".addReg(SrcReg, getKillRegState(KillSrc) | getRenamableRegState(RenamableSrc))"
+            elif isa.is_imm_type(param.type_):
+                buildmi += f".addReg({{Xpu}}::{zeroreg})"
+            else:
+                buildmi += f"/*{param} {param.type_}*/ "
+        buildmi += ";"
+        return buildmi
+
+
 def estimate_add_immediate_codes(isa, li_ops):
     def get_cond(imm):
         cond = "!(Amount & {mask}) && ({minv} <= (Amount>>{shift})) && ((Amount>>{shift}) <= {maxv})".format(
@@ -985,6 +1016,10 @@ class LLVMCompiler():
             buildmis = (bmi.format(Xpu=self.namespace) for bmi in buildmis)
             addimm_codes.append((cond, vardefs, buildmis))
 
+        (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+        copy_reg_buildmi = estimate_copy_reg_buildmi(self.isa, [], addi_s, add_s, reg0)
+        copy_reg_buildmi = copy_reg_buildmi.format(Xpu=self.namespace)
+
         # llvm/lib/Target/Xpu/XpuISelDAGToDAG.cpp
         _codes = estimate_selectaddr_codes(self.isa, li_ops, has_addr=True)
         selectaddr_addr_imm_codes = []
@@ -1024,6 +1059,7 @@ class LLVMCompiler():
             "instr_aliases": instr_aliases,
 
             "addimm_codes": addimm_codes,
+            "copy_reg_buildmi": copy_reg_buildmi,
 
             "selectaddr_addr_imm_codes": selectaddr_addr_imm_codes,
             "selectaddr_imm_codes": selectaddr_imm_codes,
