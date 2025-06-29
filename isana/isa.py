@@ -234,10 +234,8 @@ class ISA():
         self._ctx.post_semantic(ins)
 
     def _autofill_instructions_attribute(self):
-        for instr_cls in self.instructions:
-            instr = instr_cls()
-            instr.isa = self
-            instr.decode(instr.opc)
+        for instr in self.instructions:
+            instr._new_param_attribute(instr, self)
             if m := may_change_pc_absolute(instr):
                 expr = m
                 expr = re.sub(r'ins\.(\w+)', r'self.params.inputs["\1"]', expr)
@@ -252,7 +250,7 @@ class ISA():
                     def target_addr(self):
                         return eval(expr)
                     return target_addr
-                instr_cls.target_addr = new_target_addr(expr)
+                instr.target_addr = new_target_addr(expr)
 
     def _make_instruction_tree(self):
         done = list()
@@ -261,6 +259,8 @@ class ISA():
         while rest:
             instr = rest.pop(0)
             parent = instr.__bases__[0]
+            if issubclass(parent, Instruction) and parent.isa is None:
+                parent.isa = instr.isa
             instr_tree.setdefault(parent, InstructionTree(parent))
             instr_tree[instr].parent = instr_tree[parent]
             if instr_tree[instr] not in instr_tree[parent].children:
@@ -299,12 +299,12 @@ class ISA():
             node.depth = depth
             if node.instr == Instruction:
                 continue
-            instr = node.instr()
+            instr = node.instr
             if gofoward:
                 pattern = ''
                 bits_sum = 0
                 if instr.opc is None:
-                    node.pattern = 'X' * instr.bitsize
+                    node.pattern = 'X' * instr.bin.bitsize
                     continue
                 for bits in reversed(instr.bin.bitss):
                     if bits.label == "$opc":
@@ -318,7 +318,6 @@ class ISA():
                     bits_sum += bits.size()
                 node.pattern = pattern[::-1]
             else:
-                instr = node.instr()
                 n_ptn = node.pattern
                 p_ptn = node.parent.pattern
                 max_bits = max(len(n_ptn), len(p_ptn))
@@ -376,26 +375,26 @@ class ISA():
                 ranks.pop()
                 continue
             node = nodes.pop(0)
-            instr0 = node.instr()
-            value0 = instr0.value_swap_endian(data, self.endian)
-            instr0.isa = self
+            # instr0 = node.instr()
+            # value0 = instr0.value_swap_endian(data, self.endian)
+            instr0 = node.instr
+            value0 = instr0.value_swap_endian(instr0, data, self.endian)
             if len(node.children) > 0:
                 if not node.match_value(value0):
                     continue
                 ranks.append(node.children[:])
                 continue
             else:
-                if instr0.match_opecode(value0):
-                    instr = instr0
+                if instr0.match_opecode(instr0, value0):
+                    instr = instr0()
                     value = value0
                     break
         if instr is None:
             for instr0 in self.unknown_instructions:
-                instr0 = instr0()
-                value0 = instr0.value_swap_endian(data, self.endian)
-                instr0.isa = self
-                if instr0.match_opecode(value0):
-                    instr = instr0
+                instr0 = instr0
+                value0 = instr0.value_swap_endian(instr0, data, self.endian)
+                if instr0.match_opecode(instr0, value0):
+                    instr = instr0()
                     value = value0
                     break
             else:
@@ -559,6 +558,8 @@ class ImmS(Immediate):
 
 
 class Instruction():
+    isa = None
+
     opc = None
     opn = None
     prm = None
@@ -582,13 +583,34 @@ class Instruction():
     has_sideeffect = False
 
     def __init__(self):
-        self.isa = None
+        # self.isa = None
         self.addr = None
-        self.params = InstructionParameters()
         self._operands = dict()
         self._pseudo_instrs = list()
         self._disasm_str = str()
         self._value = int()
+        self._init_params()
+
+    def _init_params(self):
+        if hasattr(self.__class__, 'params'):
+            params = self.__class__.params
+            obj_params = InstructionParameters(isa=self.__class__.isa)
+            for k, v in params.opecodes.items():
+                param = copy.deepcopy(v)
+                param.instr = self
+                obj_params.opecodes[k] = param
+            for k, v in params.outputs.items():
+                param = copy.deepcopy(v)
+                param.instr = self
+                obj_params.outputs[k] = param
+            for k, v in params.inputs.items():
+                param = copy.deepcopy(v)
+                param.instr = self
+                obj_params.inputs[k] = param
+            self.params = obj_params
+        else:
+            obj_params = InstructionParameters(isa=self.__class__.isa)
+            self.params = obj_params
 
     def __repr__(self):
         s = "Instruction({})"
@@ -632,13 +654,11 @@ class Instruction():
 
     @property
     def bitsize(self):
-        if self.bin is None:
-            return 0
         return self.bin.bitsize
 
     @property
     def bytesize(self):
-        return (self.bitsize + 7) // 8
+        return self.bin.bytesize
 
     @property
     def opecode(self):
@@ -677,7 +697,7 @@ class Instruction():
     def value_swap_endian(self, value: bytes, endian: str):
         if not self.bin:
             return None
-        value_ = value[:self.bytesize]
+        value_ = value[:self.bin.bytesize]
         if endian == "big":
             # swap to little endian
             value_ = reversed(value_)
@@ -694,12 +714,37 @@ class Instruction():
             return True
         return False
 
+    def _new_param_attribute(cls, isa):
+        if not cls.bin:
+            raise Exception(f"'{cls.__name__}' don't have 'bin'")
+        if not cls.prm:
+            raise Exception(f"'{cls.__name__}' don't have 'prm'")
+        cls.isa = isa
+        cls.params = InstructionParameters(isa=isa)
+        for label in cls.prm.opecodes:
+            tp = cls.prm.opecodes[label]
+            cls.params.opecodes.setdefault(label, cls._make_param(cls, label, tp))
+        for label in cls.prm.outputs:
+            tp = cls.prm.outputs[label]
+            cls.params.outputs.setdefault(label, cls._make_param(cls, label, tp))
+        for label in cls.prm.inputs:
+            tp = cls.prm.inputs[label]
+            cls.params.inputs.setdefault(label, cls._make_param(cls, label, tp))
+
     def decode(self, value: int, addr: int | None = None):
         if not self.bin:
             return None
         self._value = value
         self.addr = addr if addr is not None else 0
-        self.params = InstructionParameters(isa=self.isa)
+        for label in self.prm.opecodes:
+            tp = self.prm.opecodes[label]
+            self.params.opecodes.setdefault(label, self._make_param(label, tp))
+        for label in self.prm.outputs:
+            tp = self.prm.outputs[label]
+            self.params.outputs.setdefault(label, self._make_param(label, tp))
+        for label in self.prm.inputs:
+            tp = self.prm.inputs[label]
+            self.params.inputs.setdefault(label, self._make_param(label, tp))
         for bits in reversed(self.bin.bitss):
             poped_value, value = bits.pop_value(value)
             if bits.label.startswith("$"):
@@ -707,19 +752,16 @@ class Instruction():
                 if label in self.prm.opecodes:
                     # key = 'opecodes'
                     tp = self.prm.opecodes[label]
-                    self.params.opecodes.setdefault(label, self._make_param(label, tp))
                     param = self.params.opecodes[label]
                     self._add_value(param, tp, poped_value)
                 if label in self.prm.outputs:
                     # key = 'outputs'
                     tp = self.prm.outputs[label]
-                    self.params.outputs.setdefault(label, self._make_param(label, tp))
                     param = self.params.outputs[label]
                     self._add_value(param, tp, poped_value)
                 if label in self.prm.inputs:
                     # key = 'inputs'
                     tp = self.prm.inputs[label]
-                    self.params.inputs.setdefault(label, self._make_param(label, tp))
                     param = self.params.inputs[label]
                     self._add_value(param, tp, poped_value)
         for label, param in self.params.inputs.items():
@@ -909,6 +951,10 @@ class InstructionBinary():
         for bits in self.bitss:
             size += bits.msb - bits.lsb + 1
         return size
+
+    @property
+    def bytesize(self):
+        return (self.bitsize + 7) // 8
 
 
 def parameter(outputs: str, inputs: str) -> list[tuple[str, str]]:

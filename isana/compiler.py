@@ -7,9 +7,7 @@ from isana.semantic import (
     may_change_pc_relative,
     may_take_memory_address,
     get_alu_dag,
-    estimate_load_immediate_dag,
-    estimate_add_immediate_codes,
-    estimate_selectaddr_codes,
+    estimate_load_immediate_ops,
 )
 from isana.isa import (
     Immediate,
@@ -162,34 +160,31 @@ def auto_make_relocations(isa):
         "other_imm": list(),
     }
     instrs = dict()
-    for cls in isa.instructions:
-        if not hasattr(cls, 'semantic'):
+    for instr in isa.instructions:
+        if not hasattr(instr, 'semantic'):
             continue
-        instr = cls()
-        instr.isa = isa
         bin_filtered = re.sub(r"\$(?!opc|imm)\w+", r"$_", str(instr.bin))
-        relocinfo = (instr.bitsize, bin_filtered)
-        instr.decode(instr.opc)  # dummy decode as all parameter is 0
+        relocinfo = (instr.bin.bitsize, bin_filtered)
         if may_change_pc_absolute(instr):
             key = "pc_abs"
             relocs[key].append(relocinfo)
             instrs.setdefault((key, bin_filtered), list())
-            instrs[(key, bin_filtered)].append(cls)
+            instrs[(key, bin_filtered)].append(instr)
         elif may_change_pc_relative(instr):
             key = "pc_rel"
             relocs[key].append(relocinfo)
             instrs.setdefault((key, bin_filtered), list())
-            instrs[(key, bin_filtered)].append(cls)
+            instrs[(key, bin_filtered)].append(instr)
         elif may_take_memory_address(instr.semantic):
             key = "mem_addr"
             relocs[key].append(relocinfo)
             instrs.setdefault((key, bin_filtered), list())
-            instrs[(key, bin_filtered)].append(cls)
+            instrs[(key, bin_filtered)].append(instr)
         elif "imm" in instr.prm.inputs.keys():  # TODO fix condition
             key = "other_imm"
             relocs[key].append(relocinfo)
             instrs.setdefault((key, bin_filtered), list())
-            instrs[(key, bin_filtered)].append(cls)
+            instrs[(key, bin_filtered)].append(instr)
         else:
             pass
     fixups = list()
@@ -289,6 +284,290 @@ def get_instr_alias(alias, isa):
         dstnode = "({} {})".format(dstnode[0], ", ".join(dstnode[1:]))
         s = 'InstAlias<"{}", {}>'.format(srcstr, dstnode)
         return s
+
+
+def _gen_sdnodexform(imm, signed_lower=False):
+    if signed_lower:
+        half = hex(2 ** (imm.offset - 1)) if imm.offset > 0 else 0
+        vstr = f"(N->getZExtValue()+{half})>>{imm.offset}"
+        X = "XX"
+    else:
+        vstr = f"N->getZExtValue()>>{imm.offset}"
+        X = "X"
+    if hasattr(imm, "signed"):
+        vstr = f"SignExtend64<{imm.width}>({vstr})"
+    else:
+        mask = hex(2 ** imm.width - 1)
+        vstr = f"(({vstr}) & {mask})"
+    s = "\n".join([
+        f"def {imm.label}{X}: SDNodeXForm<imm, [{{",
+        "  return CurDAG->getTargetConstant(",
+        f"    {vstr},SDLoc(N),N->getValueType(0)",
+        "  );",
+        "}]>;"
+    ])
+    return s
+
+
+def estimate_load_immediate_dag(isa, li_ops):
+    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    zeroreg = None
+    for group in isa.registers:
+        for reg in group.regs:
+            if reg.is_zero:
+                zeroreg = reg
+                break
+    immxs = []
+    dags = []
+    imm32 = None
+    for imm in isa.immediates:
+        if imm.width == 32 and imm.offset == 0:
+            imm32 = imm
+            break
+    for ops in (li32,) + li_s + lui_s + addi_s:
+        if isinstance(ops[0], tuple):
+            # lui
+            op, lui_imm = ops[0]
+            immtp = lui_imm.label
+            lui_str = [op.opn.upper()]
+            for param in op.params.inputs.values():
+                if param.type_ == immtp:
+                    lui_str.append(f"({immtp}XX imm:$imm)")
+                else:
+                    if zeroreg:
+                        lui_str.append(zeroreg.label.upper())
+                    else:
+                        raise Exception("cannot generate load immediate dag")
+            lui_str = " ".join(lui_str)
+            # addi
+            op, addi_imm = ops[1]
+            immtp = addi_imm.label
+            opstr = []
+            for param in op.params.inputs.values():
+                if param.type_ == immtp:
+                    opstr.append(f"({immtp}X imm:$imm)")
+                else:
+                    opstr.append(f"({lui_str})")
+            opstr = op.opn.upper() + " " + ", ".join(opstr)
+            if ops == li32:
+                if imm32:
+                    dags.append((imm32.label, opstr))
+                else:
+                    dags.append(("i32imm", opstr))
+            else:
+                dags.append((immtp, opstr))
+            immx = (lui_imm, hasattr(addi_imm, "signed"))
+            if immx not in immxs:
+                immxs.append(immx)
+            immx = (addi_imm, False)
+            if immx not in immxs:
+                immxs.append(immx)
+        else:
+            op, imm = ops
+            # r_tp = op.params.inputs["imm"].type_
+            # imm = next(filter(lambda im: im.label == r_tp, isa.immediates), None)
+            immtp = imm.label
+            opstr = []
+            for param in op.params.inputs.values():
+                if param.type_ == immtp:
+                    opstr.append(f"({immtp}X imm:$imm)")
+                else:
+                    if zeroreg:
+                        opstr.append(zeroreg.label.upper())
+                    else:
+                        raise Exception("cannot generate load immediate dag")
+            opstr = op.opn.upper() + " " + ", ".join(opstr)
+            dags.append((immtp, opstr))
+            immx = (imm, False)
+            if immx not in immxs:
+                immxs.append(immx)
+    xforms = []
+    for immx in immxs:
+        imm, signed = immx
+        xforms.append(_gen_sdnodexform(imm, signed))
+    return xforms, dags
+
+
+def estimate_add_immediate_codes(isa, li_ops):
+    def get_cond(imm):
+        cond = "!(Amount & {mask}) && ({minv} <= (Amount>>{shift})) && ((Amount>>{shift}) <= {maxv})".format(
+            mask=int(pow(2, imm.offset) - 1),
+            shift=imm.offset,
+            minv=-int(pow(2, imm.width)),
+            maxv=int(pow(2, imm.width) - 1),
+        )
+        return cond
+
+    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    codes = list()
+    for ops in li_s + lui_s + addi_s + (li32,):
+        vardefs = []
+        buildmis = []
+        if isinstance(ops[0], tuple):
+            lui_op, lui_imm = ops[0]
+            lui_opname = lui_op.opn.upper()
+            addi_op, addi_imm = ops[1]
+            addi_opname = addi_op.opn.upper()
+            # lui
+            vardef = "Register TempReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
+            vardefs.append(vardef)
+            vardef = "Register ImmReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
+            vardefs.append(vardef)
+            if hasattr(addi_imm, "signed"):
+                vardef = "int64_t Hi = ((Amount + {half}) >> {shift}) & {mask};".format(
+                    half=2 ** (lui_imm.offset - 1),
+                    shift=lui_imm.offset,
+                    mask=2 ** lui_imm.width - 1,
+                )
+            else:
+                vardef = "int64_t Hi = ((Amount >> {shift})) & {mask};".format(
+                    shift=lui_imm.offset,
+                    mask=2 ** lui_imm.width - 1,
+                )
+            vardefs.append(vardef)
+            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{lui_opname}), TempReg)"
+            for param in lui_op.params.inputs.values():
+                if isa.is_imm_type(param.type_):
+                    buildmi += ".addImm(Hi)"
+                else:
+                    buildmi += f"/*{param} {param.type_}*/ "
+            buildmi += ";"
+            buildmis.append(buildmi)
+            # addi
+            vardef = "int64_t Lo = Amount & {mask};".format(
+                mask=2 ** addi_imm.width - 1,
+            )
+            vardefs.append(vardef)
+            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{addi_opname}), ImmReg)"
+            for param in addi_op.params.inputs.values():
+                if isa.is_reg_type(param.type_):
+                    buildmi += ".addReg(TempReg, RegState::Kill)"
+                elif isa.is_imm_type(param.type_):
+                    buildmi += ".addImm(Lo)"
+                else:
+                    buildmi += f"/*{param} {param.type_}*/ "
+            buildmi += ";"
+            buildmis.append(buildmi)
+            # add
+            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::ADD), DstReg)"  # noqa
+            buildmi += ".addReg(SrcReg)"
+            buildmi += ".addReg(ImmReg, RegState::Kill)"
+            buildmi += ";"
+            buildmis.append(buildmi)
+
+            cond = "else"
+            codes.append((cond, vardefs, buildmis))
+        else:
+            op, imm = ops
+            cond = get_cond(imm)
+            cond = f"if (/*{imm.label}*/ {cond})"
+            if len(codes) > 0:
+                cond = "else " + cond
+            opname = op.opn.upper()
+            if ops in li_s or ops in lui_s:
+                # l[u]i : l[u]i t, hi(amount); add dst, src, t
+                vardef = "Register TempReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
+                vardefs.append(vardef)
+                if ops in lui_s:
+                    vardef = "int64_t Hi = ((Amount >> {shift})) & {mask};".format(
+                        shift=imm.offset,
+                        mask=2 ** imm.width - 1,
+                    )
+                    vardefs.append(vardef)
+                # l[u]i
+                buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), TempReg)"
+                for param in op.params.inputs.values():
+                    if isa.is_imm_type(param.type_):
+                        if ops in lui_s:
+                            buildmi += ".addImm(Hi)"
+                        else:
+                            buildmi += ".addImm(Amount)"
+                    else:
+                        buildmi += f"/*{param} {param.type_}*/ "
+                buildmi += ";"
+                # add
+                buildmis.append(buildmi)
+                buildmi = "BuildMI(MBB, MBBI, DL, get({Xpu}::ADD), DstReg)"
+                buildmi += ".addReg(SrcReg)"
+                buildmi += ".addReg(TempReg)"
+                buildmi += ";"
+                buildmis.append(buildmi)
+            else:
+                # addi  : addi dst, src, amount;
+                buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), DstReg)"
+                for param in op.params.inputs.values():
+                    if isa.is_reg_type(param.type_):
+                        buildmi += ".addReg(SrcReg)"
+                    elif isa.is_imm_type(param.type_):
+                        buildmi += ".addImm(Amount)"
+                    else:
+                        buildmi += f"/*{param} {param.type_}*/ "
+                buildmi += ";"
+                buildmis.append(buildmi)
+            codes.append((cond, vardefs, buildmis))
+    return codes
+
+
+def estimate_selectaddr_codes(isa, li_ops, has_addr):
+    def get_cond(imm):
+        cond = "!(CVal & {mask}) && ({minv} <= (CVal>>{shift})) && ((CVal>>{shift}) <= {maxv})".format(
+            mask=int(pow(2, imm.offset) - 1),
+            shift=imm.offset,
+            minv=-int(pow(2, imm.width)),
+            maxv=int(pow(2, imm.width) - 1),
+        )
+        return cond
+
+    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    codes = list()
+    for ops in addi_s + lui_addi_s:
+        vardefs = []
+        sdvalues = []
+        if isinstance(ops[0], tuple):
+            lui_op, lui_imm = ops[0]
+            addi_op, addi_imm = ops[1]
+            cond = "else"
+            vardef = "int64_t Lo = CVal & {mask};".format(
+                mask=2 ** addi_imm.width - 1,
+            )
+            vardefs.append(vardef)
+            vardef = "int64_t Hi = ((CVal >> {shift})) & {mask};".format(
+                shift=lui_imm.offset,
+                mask=2 ** lui_imm.width - 1,
+            )
+            vardefs.append(vardef)
+            sdvalue = ("auto Lui = SDValue(CurDAG->getMachineNode({Xpu}::LUI, DL, VT, "
+                       "CurDAG->getTargetConstant(Hi, DL, VT)), 0);")
+            sdvalues.append(sdvalue)
+            if has_addr:
+                sdvalue = ("Base = SDValue(CurDAG->getMachineNode({Xpu}::ADD, DL, VT, "
+                           "Addr.getOperand(0), Lui), 0);")
+                sdvalues.append(sdvalue)
+            else:
+                sdvalue = ("Base = Lui;")
+                sdvalues.append(sdvalue)
+            sdvalue = "Offset = CurDAG->getTargetConstant(Lo, DL, VT);"
+            sdvalues.append(sdvalue)
+            codes.append((cond, vardefs, sdvalues))
+        else:
+            op, imm = ops
+            cond = get_cond(imm)
+            cond = f"if (/*{imm.label}*/ {cond})"
+            if len(codes) > 0:
+                cond = "else " + cond
+            # addi  : addi dst, src, amount;
+            if has_addr:  # (add addr, imm) -> (addr, imm)
+                sdvalue = "Base = Addr.getOperand(0);"
+                sdvalues.append(sdvalue)
+                sdvalue = "Offset = CurDAG->getTargetConstant(CVal, DL, VT);"
+                sdvalues.append(sdvalue)
+            else:  # (imm) -> (zero, imm)
+                sdvalue = "Base = CurDAG->getRegister({Xpu}::{REG0}, VT);"
+                sdvalues.append(sdvalue)
+                sdvalue = "Offset = CurDAG->getTargetConstant(CVal, DL, VT);"
+                sdvalues.append(sdvalue)
+            codes.append((cond, vardefs, sdvalues))
+    return codes
 
 
 class LLVMCompiler():
@@ -451,6 +730,8 @@ class LLVMCompiler():
         return kwargs
 
     def _prepare_instrinfo(self):
+        reg0 = self.kwargs['REG0']
+
         # -- InstrInfo.td --
         asm_operand_clss = []
         operand_clss = []
@@ -489,10 +770,7 @@ class LLVMCompiler():
             ))
 
         br_imm_operand_clss = []
-        for cls in self.isa.instructions:
-            instr = cls()
-            instr.isa = self.isa
-            instr.decode(instr.opc)  # dummy decode as all parameter is 0
+        for instr in self.isa.instructions:
             instr_def = InstrDefs()
             if m := may_change_pc_relative(instr):
                 imm_key = m
@@ -518,12 +796,7 @@ class LLVMCompiler():
                     br_imm_operand_clss.append(operand_cls)
 
         instr_defs = []
-        for cls in self.isa.instructions:
-            instr = cls()
-            instr.isa = self.isa
-            instr.decode(instr.opc)  # dummy decode as all parameter is 0
-            instr_def = InstrDefs()
-
+        for instr in self.isa.instructions:
             pc_relative = may_change_pc_relative(instr)
 
             instr_def.varname = instr.__class__.__name__.upper()
@@ -659,8 +932,11 @@ class LLVMCompiler():
 
             instr_defs.append(instr_def)
 
+        # prepare load immediate
+        li_ops = estimate_load_immediate_ops(self.isa)
+
         # gen load immediate
-        xforms, dags = estimate_load_immediate_dag(self.isa)
+        xforms, dags = estimate_load_immediate_dag(self.isa, li_ops)
         li_pat_fmt = "def : Pat<({immtp}:$imm), ({opstr})>;"
         li_pats = [li_pat_fmt.format(immtp=immtp, opstr=opstr) for immtp, opstr in dags]
         gen_li_defs = "\n".join(xforms) + "\n\n" + "\n".join(li_pats)
@@ -702,7 +978,7 @@ class LLVMCompiler():
                 instr_aliases.append(instr_alias)
 
         # llvm/lib/Target/Xpu/XpuInstrInfo.cpp
-        _codes = estimate_add_immediate_codes(self.isa)
+        _codes = estimate_add_immediate_codes(self.isa, li_ops)
         addimm_codes = []
         for cond, vardefs, buildmis in _codes:
             vardefs = (var.format(Xpu=self.namespace) for var in vardefs)
@@ -710,16 +986,14 @@ class LLVMCompiler():
             addimm_codes.append((cond, vardefs, buildmis))
 
         # llvm/lib/Target/Xpu/XpuISelDAGToDAG.cpp
-        reg0 = self.kwargs['REG0']
-
-        _codes = estimate_selectaddr_codes(self.isa, has_addr=True)
+        _codes = estimate_selectaddr_codes(self.isa, li_ops, has_addr=True)
         selectaddr_addr_imm_codes = []
         for cond, vardefs, sdvalues in _codes:
             vardefs = (var.format(Xpu=self.namespace) for var in vardefs)
             sdvalues = (bmi.format(Xpu=self.namespace) for bmi in sdvalues)
             selectaddr_addr_imm_codes.append((cond, vardefs, sdvalues))
 
-        _codes = estimate_selectaddr_codes(self.isa, has_addr=False)
+        _codes = estimate_selectaddr_codes(self.isa, li_ops, has_addr=False)
         selectaddr_imm_codes = []
         for cond, vardefs, sdvalues in _codes:
             vardefs = (var.format(Xpu=self.namespace) for var in vardefs)
