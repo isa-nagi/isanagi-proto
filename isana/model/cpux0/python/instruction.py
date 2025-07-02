@@ -316,25 +316,52 @@ class rorv(InstrArrr):
         pass
 
 
+def compare(lhs: int, rhs: int):
+    if lhs > rhs:
+        return 0
+    elif lhs == rhs:
+        return 1
+    else:
+        return 2
+
+def compare_eq(value: int):
+    return (value & 3) == 1
+
+def compare_ne(value: int):
+    return (value & 3) == 3
+
+def compare_gt(value: int):
+    return (value & 3) == 0
+
+def compare_lt(value: int):
+    return (value & 3) == 2
+
+def compare_ge(value: int):  # TODO: fix
+    return (value & 3) == 0
+
+def compare_le(value: int):  # TODO: fix
+    return (value & 3) == 2
+
+
 class cmp(InstrArri):
     opn, opc = "CMP", 0b00101010_0000_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
-        ctx.SR[0] = ctx.builtin.cmp(ins.cx, ins.ra, ins.rb)
+        ctx.SR[0] = compare(ins.ra, ins.rb)
 
 
 class cmpu(InstrArri):
     opn, opc = "CMPu", 0b00101011_0000_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
-        ctx.SR[0] = ctx.builtin.cmp(ins.cx, unsigned(32, ins.ra), unsigned(32, ins.rb))
+        ctx.SR[0] = compare(unsigned(32, ins.ra), unsigned(32, ins.rb))
 
 
 class jeq(InstrJ):
     opn, opc = "JEQ", 0b00110000_0000_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
-        cond = ctx.SR[0].N == 0 and ctx.SR[0].Z == 1
+        cond = compare_eq(ctx.SR[0])
         if cond:
             ctx.C0R.pc += ins.cx
 
@@ -343,7 +370,7 @@ class jne(InstrJ):
     opn, opc = "JNE", 0b00110001_0000_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
-        cond = ctx.SR[0].N == 1 and ctx.SR[0].Z == 1
+        cond = compare_ne(ctx.SR[0])
         if cond:
             ctx.C0R.pc += ins.cx
 
@@ -352,7 +379,7 @@ class jlt(InstrJ):
     opn, opc = "JLT", 0b00110010_0000_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
-        cond = ctx.SR[0].N == 0 and ctx.SR[0].Z == 0
+        cond = compare_lt(ctx.SR[0])
         if cond:
             ctx.C0R.pc += ins.cx
 
@@ -361,7 +388,7 @@ class jgt(InstrJ):
     opn, opc = "JGT", 0b00110011_0000_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
-        cond = ctx.SR[0].N == 1 and ctx.SR[0].Z == 0
+        cond = compare_gt(ctx.SR[0])
         if cond:
             ctx.C0R.pc += ins.cx
 
@@ -370,7 +397,7 @@ class jle(InstrJ):
     opn, opc = "JLE", 0b00110100_0000_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
-        cond = ctx.SR[0].N == 0 and ctx.SR[0].Z == 0  # TODO: fix it
+        cond = compare_le(ctx.SR[0])
         if cond:
             ctx.C0R.pc += ins.cx
 
@@ -379,7 +406,7 @@ class jge(InstrJ):
     opn, opc = "JGE", 0b00110101_0000_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
-        cond = ctx.SR[0].N == 1 and ctx.SR[0].Z == 0  # TODO: fix it
+        cond = compare_ge(ctx.SR[0])
         if cond:
             ctx.C0R.pc += ins.cx
 
@@ -417,6 +444,7 @@ class jsub(InstrJ):
 
 class jr(InstrJ):
     opn, opc = "JR", 0b00111100_0000_0000_0000_000000000000
+    is_return = True
 
     def semantic(self, ctx, ins):
         ctx.C0R.pc = ctx.GPR[14]
@@ -535,7 +563,7 @@ class sltiu(InstrJ):
     opn, opc = "SLTiu", 0b00010111_0000_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
-        ctx.GPR[ins.ra] = unsigned(32, ctx.GPR[ins.rb]) < ins.cx
+        ctx.GPR[ins.ra] = unsigned(32, ctx.GPR[ins.rb]) < unsigned(32, ins.cx)
 
 
 class slt(InstrJ):

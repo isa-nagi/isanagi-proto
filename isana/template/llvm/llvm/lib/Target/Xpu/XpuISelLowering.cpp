@@ -457,27 +457,29 @@ SDValue
   MVT XLenVT = Subtarget.getXLenVT();
 
   if (isPositionIndependent()) {
-    SDValue Addr = getTargetNode(N, DL, Ty, DAG, 0);
-    if (IsLocal)
-      // return DAG.getNode({{ Xpu }}ISD::LLA, DL, Ty, Addr);
-      return SDValue(DAG.getMachineNode({{ Xpu }}::ADDI, DL, Ty,
-                                        DAG.getRegister({{ Xpu }}::X0, XLenVT), Addr), 0);
+    // SDValue Addr = getTargetNode(N, DL, Ty, DAG, 0);
+    // if (IsLocal)
+    //   // return SDValue(DAG.getMachineNode({{ Xpu }}::PseudoLLA, DL, Ty, Addr), 0);
+    //   return SDValue(DAG.getMachineNode({{ Xpu }}::ADDI, DL, Ty,
+    //                                     DAG.getRegister({{ Xpu }}::X0, XLenVT), Addr), 0);
+    report_fatal_error("Position independent address is not supported.");
   }
 
-  // switch (getTargetMachine().getCodeModel()) {
-  //   default:
-  //     report_fatal_error("Unsupported code model for lowering");
-  //   case CodeModel::Small: {
-      SDValue AddrHi = getTargetNode(N, DL, Ty, DAG, {{ Xpu }}II::MO_SYMBOL);
-      SDValue AddrLo = getTargetNode(N, DL, Ty, DAG, {{ Xpu }}II::MO_SYMBOL);
-      SDValue MNHi = SDValue(DAG.getMachineNode({{ Xpu }}::LUI, DL, Ty, AddrHi), 0);
-      return SDValue(DAG.getMachineNode({{ Xpu }}::ADDI, DL, Ty, MNHi, AddrLo), 0);
+  switch (getTargetMachine().getCodeModel()) {
+    default:
+      report_fatal_error("Unsupported code model for lowering");
+    case CodeModel::Small: {
+  //     SDValue Addr = getTargetNode(N, DL, Ty, DAG, 0);
+  //     return SDValue(DAG.getMachineNode({{ Xpu }}::PseudoLA, DL, Ty, Addr), 0);
+      {%- for code in getaddr_la_sdvalue_codes %}
+      {{ code }}
+      {%- endfor %}
   //   }
   //   case CodeModel::Medium: {
   //     SDValue Addr = getTargetNode(N, DL, Ty, DAG, 0);
-  //     return SDValue(DAG.getMachineNode({{ Xpu }}::PseudoLLA, DL, Ty, Addr), 0);
-  //   }
-  // }
+  //     return SDValue(DAG.getMachineNode({{ Xpu }}::PseudoLGA, DL, Ty, Addr), 0);
+    }
+  }
 }
 
 SDValue
@@ -600,18 +602,9 @@ getBranchOpcodeForIntCondCode (ISD::CondCode CC) {
   switch (CC) {
   default:
     llvm_unreachable("Unsupported CondCode");
-  case ISD::SETEQ:
-    return {{ Xpu }}::BEQ;
-  case ISD::SETNE:
-    return {{ Xpu }}::BNE;
-  case ISD::SETLT:
-    return {{ Xpu }}::BLT;
-  case ISD::SETGE:
-    return {{ Xpu }}::BGE;
-  case ISD::SETULT:
-    return {{ Xpu }}::BLTU;
-  case ISD::SETUGE:
-    return {{ Xpu }}::BGEU;
+  {%- for cc, br in cc_to_br_codes %}
+  case {{ cc }}: return {{ br }};
+  {%- endfor %}
   }
 }
 

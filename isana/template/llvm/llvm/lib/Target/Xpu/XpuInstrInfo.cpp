@@ -332,12 +332,9 @@ static unsigned getOppositeBranchOpc(unsigned Opcode) {
   switch (Opcode) {
   default:
     llvm_unreachable("Unknown conditional branch!");
-  case {{ Xpu }}::BEQ: return {{ Xpu }}::BNE;
-  case {{ Xpu }}::BNE: return {{ Xpu }}::BEQ;
-  case {{ Xpu }}::BLT: return {{ Xpu }}::BGE;
-  case {{ Xpu }}::BGE: return {{ Xpu }}::BLT;
-  case {{ Xpu }}::BLTU: return {{ Xpu }}::BGEU;
-  case {{ Xpu }}::BGEU: return {{ Xpu }}::BLTU;
+  {%- for brop0, brop1 in opposite_br_codes %}
+  case {{ brop0 }}: return {{ brop1 }};
+  {%- endfor %}
   }
 }
 

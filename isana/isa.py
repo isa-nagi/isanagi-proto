@@ -1016,6 +1016,10 @@ def u32(value: int):
     return unsigned(32, value)
 
 
+def compare(ctx, lhs: int, rhs: int):
+    raise NotImplementedError()
+
+
 # ----
 class InstructionAlias():
     def __init__(self, src, dst):

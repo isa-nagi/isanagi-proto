@@ -256,9 +256,11 @@ def may_take_memory_address(semantic):
     return True
 
 
+def unsigned():
+    pass
+
+
 def get_alu_dag(semantic):
-    def unsigned():
-        pass
     def imm_term_semantic(self, ctx, ins):
         # ins.PickAny
         ins.Pick
@@ -292,7 +294,6 @@ def get_alu_dag(semantic):
     op_node = m.picks[3]
     rhs_r = m.picks[4]
 
-    # print("A", semantic, dst_semantic)
     if ml := _search_ast(rhs_l, _strip_expr(signed_term_semantic)):
         rhs_l_tp = ml.picks[0].attr
         rhs_l_name = ml.picks[1].attr
@@ -393,3 +394,186 @@ def estimate_load_immediate_ops(isa):
                 if lui_imm.width + lui_imm.offset == 32 and not li32:
                     li32 = ((lui, lui_imm), (addi, addi_imm))
     return (li32, tuple(li_s), tuple(lui_s), tuple(addi_s), tuple(lui_addi_s), tuple(add_s))
+
+
+def may_compare(semantic):
+    def compare(lhs, rhs):
+        pass
+    def cmp_semantic(s, ctx, ins):
+        PickAny = compare(Any, Any)
+
+    m = _match_ast(semantic, cmp_semantic)
+    return m
+
+
+cmp_br_funcs = (
+    'compare_eq', 'compare_ne', 'compare_gt', 'compare_lt', 'compare_ge', 'compare_le',
+    'compare_ueq', 'compare_une', 'compare_ugt', 'compare_ult', 'compare_uge', 'compare_ule',
+)
+
+
+def may_compare_branch(semantic):
+    def cmp_br_semantic(s, ctx, ins):
+        cond = PickAny(PickAny)
+
+    m = _search_ast(semantic, cmp_br_semantic)
+    if m and m.picks[0].id not in cmp_br_funcs:
+        return None
+        # new_picks = tuple([m.picks[0].id] + m.picks[1:])
+        # m.picks = new_picks
+    return m
+
+
+def estimate_compare_branch_ops(isa):
+    cmp_s = []
+    cmp_br_s = {}
+    for cmp_func in cmp_br_funcs:
+        cmp_br_s.setdefault(cmp_func, list())
+    for instr in isa.instructions:
+        if m := may_compare_branch(instr.semantic):
+            cmp_func = m.picks[0].id
+            if type(m.picks[1]) is ast.Subscript:
+                grp = m.picks[1].value.attr
+                reg = m.picks[1].slice.value
+            else:
+                grp = m.picks[1].value.attr
+                reg = m.picks[1].attr
+            cmp_br_s[cmp_func].append((instr, grp, reg))
+        elif m := may_compare(instr.semantic):
+            if type(m.picks[0]) is ast.Subscript:
+                grp = m.picks[0].value.attr
+                reg = m.picks[0].slice.value
+            else:
+                grp = m.picks[0].value.attr
+                reg = m.picks[0].attr
+            cmp_s.append((instr, grp, reg))
+    return (cmp_s, cmp_br_s)
+
+
+def may_branch(semantic):
+    def cmp_br_semantic(s, ctx, ins):
+        cond = PickAny != PickAny
+
+    m = _match_ast(semantic, cmp_br_semantic)
+    return m
+
+
+def may_ubranch(semantic):
+    def cmp_ubr_semantic(s, ctx, ins):
+        cond = unsigned(Any, PickAny) != unsigned(Any, PickAny)
+
+    m = _match_ast(semantic, cmp_ubr_semantic)
+    return m
+
+
+br_ast = {
+    ast.Eq: "eq",
+    ast.NotEq: "ne",
+    ast.Gt: "gt",
+    ast.Lt: "lt",
+    ast.GtE: "ge",
+    ast.LtE: "le",
+}
+ubr_ast = {
+    ast.Eq: "ueq",
+    ast.NotEq: "une",
+    ast.Gt: "ugt",
+    ast.Lt: "ult",
+    ast.GtE: "uge",
+    ast.LtE: "ule",
+}
+
+
+def estimate_branch_ops(isa):
+    br_s = {}
+    for name in list(br_ast.values()) + list(ubr_ast.values()):
+        br_s.setdefault(name, list())
+    for instr in isa.instructions:
+        m1 = may_branch(instr.semantic)
+        m2 = may_ubranch(instr.semantic)
+        if m1 or m2:
+            m = m2 or m1
+            is_unsigned = m == m2
+            binop = type(m.picks[1])
+            if type(m.picks[0]) is ast.Subscript:
+                lgrp = m.picks[0].value.attr
+                lreg = m.picks[0].slice.attr
+            else:
+                lgrp = m.picks[0].value.attr
+                lreg = m.picks[0].attr
+            if type(m.picks[2]) is ast.Subscript:
+                rgrp = m.picks[2].value.attr
+                rreg = m.picks[2].slice.attr
+            elif type(m.picks[2]) is ast.Constant:
+                rgrp = None
+                rreg = m.picks[2].value
+            else:
+                rgrp = m.picks[2].value.attr
+                rreg = m.picks[2].attr
+            if is_unsigned:
+                br_s[ubr_ast[binop]].append((instr, lgrp, lreg, rgrp, rreg))
+            else:
+                br_s[br_ast[binop]].append((instr, lgrp, lreg, rgrp, rreg))
+    return br_s
+
+
+def may_setcc(semantic):
+    def setcc_semantic(s, ctx, ins):
+        PickAny = PickAny != PickAny
+
+    m = _match_ast(semantic, setcc_semantic)
+    if m and type(m.picks[0]) is ast.Name and m.picks[0].id == 'cond':
+        return None
+    return m
+
+
+def may_usetcc(semantic):
+    def usetcc_semantic(s, ctx, ins):
+        PickAny = unsigned(Any, PickAny) != unsigned(Any, PickAny)
+
+    m = _match_ast(semantic, usetcc_semantic)
+    if m and type(m.picks[0]) is ast.Name and m.picks[0].id == 'cond':
+        return None
+    return m
+
+
+def estimate_setcc_ops(isa):
+    setcc_s = {}
+    for name in list(br_ast.values()) + list(ubr_ast.values()):
+        setcc_s.setdefault(name, list())
+    for instr in isa.instructions:
+        m1 = may_setcc(instr.semantic)
+        m2 = may_usetcc(instr.semantic)
+        if m1 or m2:
+            m = m2 or m1
+            is_unsigned = m == m2
+            binop = type(m.picks[2])
+            if type(m.picks[0]) is ast.Subscript:
+                dgrp = m.picks[0].value.attr
+                dreg = m.picks[0].slice.attr
+            else:
+                lgrp = m.picks[1].value.attr
+                lreg = m.picks[1].attr
+            if type(m.picks[1]) is ast.Subscript:
+                lgrp = m.picks[1].value.attr
+                lreg = m.picks[1].slice.attr
+            else:
+                lgrp = m.picks[1].value.attr
+                lreg = m.picks[1].attr
+            if type(m.picks[3]) is ast.Subscript:
+                rgrp = m.picks[3].value.attr
+                rreg = m.picks[3].slice.attr
+            elif type(m.picks[3]) is ast.Constant:
+                rgrp = None
+                rreg = m.picks[3].value
+            elif type(m.picks[3]) is ast.Attribute:  # ins.imm
+                rgrp = "UnknownImm"
+                rreg = m.picks[3].attr
+            else:
+                rgrp = m.picks[3].value.attr
+                rreg = m.picks[3].attr
+            if is_unsigned:
+                setcc_s[ubr_ast[binop]].append((instr, dgrp, dreg, lgrp, lreg, rgrp, rreg))
+            else:
+                setcc_s[br_ast[binop]].append((instr, dgrp, dreg, lgrp, lreg, rgrp, rreg))
+    return setcc_s

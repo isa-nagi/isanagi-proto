@@ -8,6 +8,9 @@ from isana.semantic import (
     may_take_memory_address,
     get_alu_dag,
     estimate_load_immediate_ops,
+    estimate_compare_branch_ops,
+    estimate_branch_ops,
+    estimate_setcc_ops,
 )
 from isana.isa import (
     Immediate,
@@ -388,6 +391,93 @@ def estimate_load_immediate_dag(isa, li_ops):
     return xforms, dags
 
 
+def estimate_branch_dag(isa, cmp_ops, br_ops, setcc_ops, zeroreg):
+    # print(cmp_ops)
+    # print(br_ops)
+    # print(setcc_ops)
+    dags = []
+    # cmp + cmp_br
+    if cmp_ops[0]:
+        pass
+    # setcc + br
+    if br_ops and setcc_ops and zeroreg:
+        if True:
+            brop, ltp, lnm, rtp, rnm = br_ops['ne'][0]
+            brtp = "Br" + list(brop.params.inputs.values())[-1].type_
+            pat_in = '(brcond {cctp}:$cond, bb:$dst)'.format(
+                cctp=ltp,
+            )
+            pat_out = '({brop} {cctp}:$cond, {zero}, {bb}:$dst)'.format(
+                brop=br_ops['ne'][0][0].__name__.upper(),
+                cctp=ltp,
+                zero=zeroreg,
+                bb=brtp,
+            )
+            pat = f'def : Pat<{pat_in}, {pat_out}>;'
+            dags.append(pat)
+        for condkey in ('eq', 'ne'):
+            brop, ltp, lnm, rtp, rnm = br_ops[condkey][0]
+            brtp = "Br" + list(brop.params.inputs.values())[-1].type_
+            pat_in = '(brcond (i32 (set{cc} {lhstp}:$lhs, 0)), bb:$dst)'.format(
+                cc=condkey,
+                lhstp=ltp,
+            )
+            pat_out = '({brop} {lhstp}:$lhs, {zero}, {bb}:$dst)'.format(
+                brop=br_ops[condkey][0][0].__name__.upper(),
+                lhstp=ltp,
+                zero=zeroreg,
+                bb=brtp,
+            )
+            pat = f'def : Pat<{pat_in}, {pat_out}>;'
+            dags.append(pat)
+        for condkey in br_ops.keys():
+            if condkey in ('eq', 'ueq', 'ne', 'une'):
+                if condkey in ('eq', 'ueq'):
+                    brkey = 'eq'
+                else:
+                    brkey = 'ne'
+                brop, ltp, lnm, rtp, rnm = br_ops[brkey][0]
+                brtp = "Br" + list(brop.params.inputs.values())[-1].type_
+                pat_out = '({brop} {lhstp}:$lhs, {rhstp}:$rhs, {bb}:$dst)'.format(
+                    brop=brop.__name__.upper(),
+                    lhstp=ltp,
+                    rhstp=rtp,
+                    bb=brtp,
+                )
+            else:
+                if condkey in ('gt', 'ugt', 'lt', 'ult'):
+                    brkey = 'ne'
+                else:
+                    brkey = 'eq'
+                brop, ltp, lnm, rtp, rnm = br_ops[brkey][0]
+                brtp = "Br" + list(brop.params.inputs.values())[-1].type_
+                if condkey in ('gt', 'lt', 'ge', 'le'):
+                    setcckey = 'lt'
+                else:
+                    setcckey = 'ult'
+                for v in setcc_ops[setcckey]:
+                    setccop, dtp, dnm, ltp, lnm, rtp, rnm = v
+                    if rtp != 'UnknownImm':
+                        break
+                pat_out = '({brop} ({setccop} {lhstp}:$lhs, {rhstp}:$rhs), {zero}, {bb}:$dst)'.format(
+                    brop=brop.__name__.upper(),
+                    setccop=setccop.__name__.upper(),
+                    lhstp=ltp,
+                    rhstp=rtp,
+                    zero=zeroreg,
+                    bb=brtp,
+                )
+            pat_in = '(brcond (i32 (set{cc} {lhstp}:$lhs, {rhstp}:$rhs)), bb:$dst)'.format(
+                cc=condkey,
+                lhstp=ltp,
+                rhstp=rtp,
+            )
+            pat = f'def : Pat<{pat_in}, {pat_out}>;'
+            dags.append(pat)
+
+    return dags
+
+
 def estimate_copy_reg_buildmi(isa, mv_ops, addi_ops, add_ops, zeroreg):
     for ops in mv_ops:
         return ""
@@ -598,6 +688,66 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
                 sdvalue = "Offset = CurDAG->getTargetConstant(CVal, DL, VT);"
                 sdvalues.append(sdvalue)
             codes.append((cond, vardefs, sdvalues))
+    return codes
+
+
+def estimate_getaddr_codes(isa, li_ops, phase):
+    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    codes = list()
+    for ops in addi_s + lui_addi_s:
+        if phase == 'lla':
+            pass
+        elif phase == 'lga':
+            pass
+        elif phase == 'la':
+            ops = lui_addi_s[0]
+            lui_op, lui_imm = ops[0]
+            addi_op, addi_imm = ops[1]
+            codes = [
+                "SDValue AddrHi = getTargetNode(N, DL, Ty, DAG, {{Xpu}}II::{mo_sym_hi});".format(
+                    mo_sym_hi="MO_SYMBOL",
+                ),
+                "SDValue AddrLo = getTargetNode(N, DL, Ty, DAG, {{Xpu}}II::{mo_sym_lo});".format(
+                    mo_sym_lo="MO_SYMBOL",
+                ),
+                "SDValue MNHi = SDValue(DAG.getMachineNode({{Xpu}}::{lui}, DL, Ty, AddrHi), 0);".format(
+                    lui=lui_op.__name__.upper(),
+                ),
+                "return SDValue(DAG.getMachineNode({{Xpu}}::{addi}, DL, Ty, MNHi, AddrLo), 0);".format(
+                    addi=addi_op.__name__.upper(),
+                ),
+            ]
+        else:
+            raise Exception(f'Unknown phase: {phase}')
+    return codes
+
+
+def estimate_opposite_br_codes(isa, br_ops):
+    codes = []
+    table = {
+        'eq': 'ne', 'ne': 'eq', 'gt': 'le', 'lt': 'ge', 'ge': 'lt', 'le': 'gt',
+        'ueq': 'une', 'une': 'ueq', 'ugt': 'ule', 'ult': 'uge', 'uge': 'ult', 'ule': 'ugt',
+    }
+    for brkey in table.keys():
+        if not br_ops[brkey] and not br_ops[table[brkey]]:
+            continue
+        brop0 = br_ops[brkey][0][0]
+        brop1 = br_ops[table[brkey]][0][0]
+        brop0 = '{{Xpu}}::{}'.format(brop0.__name__.upper())
+        brop1 = '{{Xpu}}::{}'.format(brop1.__name__.upper())
+        codes.append((brop0, brop1))
+    return codes
+
+
+def estimate_condcode_to_br_codes(isa, br_ops):
+    codes = []
+    for brkey in br_ops:
+        if not br_ops[brkey]:
+            continue
+        brop = br_ops[brkey][0][0]
+        condcode = 'ISD::SET{}'.format(brkey.upper())
+        brop = '{{Xpu}}::{}'.format(brop.__name__.upper())
+        codes.append((condcode, brop))
     return codes
 
 
@@ -830,7 +980,8 @@ class LLVMCompiler():
         for instr in self.isa.instructions:
             pc_relative = may_change_pc_relative(instr)
 
-            instr_def.varname = instr.__class__.__name__.upper()
+            instr_def = InstrDefs()
+            instr_def.varname = instr.__name__.upper()
             # instr_def.ins = ', '.join([
             #     '{}:${}'.format(cls, label) for label, cls in instr.prm.inputs.items()
             # ])
@@ -872,7 +1023,7 @@ class LLVMCompiler():
             #     f"{self.namespace}{instr.bitsize}",
             # ))
             params.append("  let Size = {};".format(
-                instr.bytesize,
+                instr.bin.bytesize,
             ))
             if duplicated_outs:
                 params.append("  let Constraints = \"{}\";".format(','.join(
@@ -975,6 +1126,13 @@ class LLVMCompiler():
 
         instr_bitsizes = list(set([ins().bitsize for ins in self.isa.instructions]))
 
+        # gen branchs
+        cmp_ops = estimate_compare_branch_ops(self.isa)
+        br_ops = estimate_branch_ops(self.isa)
+        setcc_ops = estimate_setcc_ops(self.isa)
+        dags = estimate_branch_dag(self.isa, cmp_ops, br_ops, setcc_ops, reg0)
+        br_dags = dags
+
         # llvm/lib/Target/Xpu/AsmParser/
         asm_operand_clss = []
         for imm in self.isa.immediates:
@@ -1020,6 +1178,13 @@ class LLVMCompiler():
         copy_reg_buildmi = estimate_copy_reg_buildmi(self.isa, [], addi_s, add_s, reg0)
         copy_reg_buildmi = copy_reg_buildmi.format(Xpu=self.namespace)
 
+        _codes = estimate_opposite_br_codes(self.isa, br_ops)
+        opposite_br_codes = []
+        for brop0, brop1 in _codes:
+            brop0 = brop0.format(Xpu=self.namespace)
+            brop1 = brop1.format(Xpu=self.namespace)
+            opposite_br_codes.append((brop0, brop1))
+
         # llvm/lib/Target/Xpu/XpuISelDAGToDAG.cpp
         _codes = estimate_selectaddr_codes(self.isa, li_ops, has_addr=True)
         selectaddr_addr_imm_codes = []
@@ -1035,6 +1200,20 @@ class LLVMCompiler():
             sdvalues = (bmi.format(Xpu=self.namespace, REG0=reg0) for bmi in sdvalues)
             selectaddr_imm_codes.append((cond, vardefs, sdvalues))
 
+        # llvm/lib/Target/Xpu/XpuISelLowering.cpp
+        _codes = estimate_getaddr_codes(self.isa, li_ops, phase='la')  # lla, lga, la
+        getaddr_la_sdvalue_codes = []
+        for code in _codes:
+            code = code.format(Xpu=self.namespace)
+            getaddr_la_sdvalue_codes.append(code)
+
+        cc_to_br_codes = []
+        _codes = estimate_condcode_to_br_codes(self.isa, br_ops)
+        for cc, br in _codes:
+            br = br.format(Xpu=self.namespace)
+            code = (cc, br)
+            cc_to_br_codes.append(code)
+
         kwargs = {
             "asm_operand_clss": asm_operand_clss,
             "operand_clss": operand_clss,
@@ -1043,6 +1222,7 @@ class LLVMCompiler():
             "instr_defs": instr_defs,
             "gen_li_defs": gen_li_defs,
             "li32_dag": li32_dag,
+            "br_dags": br_dags,
 
             "instr_bitsizes": instr_bitsizes,
 
@@ -1060,9 +1240,13 @@ class LLVMCompiler():
 
             "addimm_codes": addimm_codes,
             "copy_reg_buildmi": copy_reg_buildmi,
+            "opposite_br_codes": opposite_br_codes,
 
             "selectaddr_addr_imm_codes": selectaddr_addr_imm_codes,
             "selectaddr_imm_codes": selectaddr_imm_codes,
+
+            "getaddr_la_sdvalue_codes": getaddr_la_sdvalue_codes,
+            "cc_to_br_codes": cc_to_br_codes,
         }
         return kwargs
 
