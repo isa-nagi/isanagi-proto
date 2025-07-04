@@ -66,7 +66,8 @@ def {{ xpu }}_ret_glue : SDNode<
 def PseudoRET: {{ Xpu }}Inst<
   (outs), (ins),
   "",
-  [({{ xpu }}_ret_glue)]>
+  [({{ xpu }}_ret_glue)]>,
+  PseudoInstExpansion<({{ pseudo_ret_dag }})>
 {
   let isPseudo = 1;
   let isCodeGenOnly = 1;
@@ -230,8 +231,8 @@ def ADJCALLSTACKDOWN : {{ Xpu }}Inst<(outs), (ins ImmS12:$amt1, ImmS12:$amt2),
 {
   let isPseudo = 1;
   let isCodeGenOnly = 1;
-  let Defs = [X2];
-  let Uses = [X2];
+  let Defs = [{{ SP }}];
+  let Uses = [{{ SP }}];
   let hasSideEffects = 1;
 }
 def ADJCALLSTACKUP   : {{ Xpu }}Inst<(outs), (ins ImmS12:$amt1, ImmS12:$amt2),
@@ -240,8 +241,8 @@ def ADJCALLSTACKUP   : {{ Xpu }}Inst<(outs), (ins ImmS12:$amt1, ImmS12:$amt2),
 {
   let isPseudo = 1;
   let isCodeGenOnly = 1;
-  let Defs = [X2];
-  let Uses = [X2];
+  let Defs = [{{ SP }}];
+  let Uses = [{{ SP }}];
   let hasSideEffects = 1;
 }
 
@@ -255,13 +256,14 @@ def call_symbol : Operand<iPTR> {
   let ParserMatchClass = CallSymbol;
 }
 def PseudoCALL : {{ Xpu }}Inst<(outs), (ins call_symbol:$func),
-  "jal x1, $func",
-  []>
+  "",
+  []>,
+  PseudoInstExpansion<({{ pseudo_call_dag }})>
 {
   let isPseudo = 1;
-  let isCodeGenOnly = 0; // be careful
+  let isCodeGenOnly = 1;
   let isCall = 1;
-  let Defs = [X1];
+  let Defs = [{{ RA }}];
   //let Size = 8;
 }
 def : Pat<({{ xpu }}_call tglobaladdr:$func), (PseudoCALL tglobaladdr:$func)>;
@@ -270,12 +272,12 @@ def : Pat<({{ xpu }}_call texternalsym:$func), (PseudoCALL texternalsym:$func)>;
 def PseudoCALLIndirect : {{ Xpu }}Inst<(outs), (ins GPR:$rs1),
   "",
   [({{ xpu }}_call GPR:$rs1)]>,
-  PseudoInstExpansion<(JALR X1, GPR:$rs1, 0)>
+  PseudoInstExpansion<({{ pseudo_callind_dag }})>
 {
   let isPseudo = 1;
   let isCodeGenOnly = 1;
   let isCall = 1;
-  let Defs = [X1];
+  let Defs = [{{ RA }}];
 }
 
 //=== Instruction Alias

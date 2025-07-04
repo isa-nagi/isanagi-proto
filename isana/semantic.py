@@ -1,5 +1,6 @@
 import ast
 import inspect
+import sys
 from textwrap import dedent
 
 
@@ -293,6 +294,74 @@ def may_take_memory_address(semantic):
     return True
 
 
+def estimate_call_ops(isa):
+    zero = None
+    ra = None
+    gpr = next(filter(lambda rg: rg.label == "GPR", isa.registers), None)
+    if gpr:
+        for reg in gpr.regs:
+            if zero is None and (reg.is_zero):
+                zero = reg
+            if ra is None and (reg.is_return_address):
+                ra = reg
+    instrs = []
+    for instr in isa.instructions:
+        if type(instr.is_call) is bool and instr.is_call:
+            if type(instr.is_indirect) is bool and not instr.is_indirect:
+                instrs.append((instr, False))  # call
+            elif type(instr.is_indirect) is bool and instr.is_indirect:
+                instrs.append((instr, True))  # callind
+    for instr in isa.instructions:
+        if m := may_change_pc_absolute(instr):
+            tgtast = ast.parse(m)
+            tgtast = resolve_unknown_variable(tgtast, instr.semantic)
+            if type(tgtast) is ast.BinOp:
+                pc_change_reg = tgtast.left
+            else:
+                pc_change_reg = tgtast
+            # pc_change_regname = pc_change_reg.slice.attr
+            pc_change_reggrp = pc_change_reg.value.attr
+            if pc_change_reggrp == ra.group.label:
+                if (instr, True) not in instrs:
+                    instrs.append((instr, True))  # callind
+        elif m := may_change_pc_relative(instr):
+            if may_branch(instr.semantic) or may_ubranch(instr.semantic):
+                continue
+            if (instr, False) not in instrs:
+                instrs.append((instr, False))  # call
+    def imm_width(x):
+        instr, is_indirect = x
+        for param in instr.params.inputs.values():
+            if isa.is_imm_type(param.type_):
+                prmobj = isa.get_param_obj(param.label, instr)
+                return prmobj.width
+        return sys.maxsize
+    instrs.sort(key=imm_width, reverse=True)
+    call_ops = {"call": [], "callind": []}
+    for instr, is_indirect in instrs:
+        operands = []
+        for asm in instr.asm.ast:
+            if asm[0] == '$' and asm != '$opn':
+                label = asm[1:]
+                prmobj = isa.get_param_obj(label, instr)
+                if label in instr.params.outputs and isinstance(prmobj, type(ra.group)):
+                    operands.append((prmobj, ra))
+                elif label in instr.params.inputs:
+                    if is_indirect:
+                        if isinstance(prmobj, type(ra.group)):
+                            operands.append((prmobj, label))
+                        else:
+                            operands.append((prmobj, 0))
+                    else:
+                        if isinstance(prmobj, type(ra.group)):
+                            operands.append((prmobj, zero))
+                        else:
+                            operands.append((prmobj, label))
+        key = "callind" if is_indirect else "call"
+        call_ops[key].append((instr, operands))
+    return call_ops
+
+
 def estimate_ret_ops(isa):
     zero = None
     ra = None
@@ -328,15 +397,15 @@ def estimate_ret_ops(isa):
                 label = asm[1:]
                 prmobj = isa.get_param_obj(label, instr)
                 if label in instr.params.outputs and isinstance(prmobj, type(zero.group)):
-                    operands.append(zero)
+                    operands.append((prmobj, zero))
                 elif label in instr.params.inputs:
                     if isinstance(prmobj, type(ra.group)):
                         if not ra_matched:
-                            operands.append(ra)
+                            operands.append((prmobj, ra))
                         else:
-                            operands.append(zero)
+                            operands.append((prmobj, zero))
                     else:
-                        operands.append(0)
+                        operands.append((prmobj, 0))
         ret_ops.append((instr, operands))
     return ret_ops
 

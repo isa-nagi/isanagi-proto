@@ -7,6 +7,7 @@ from isana.semantic import (
     may_change_pc_relative,
     may_take_memory_address,
     get_alu_dag,
+    estimate_call_ops,
     estimate_ret_ops,
     estimate_load_immediate_ops,
     estimate_compare_branch_ops,
@@ -480,6 +481,58 @@ def estimate_branch_dag(isa, cmp_ops, br_ops, setcc_ops, zeroreg):
     return dags
 
 
+def estimate_pseudo_ret_dag(isa, ret_ops):
+    ret_op = ret_ops[0]
+    ret_op, operands = ret_op
+    s = ret_op.__name__.upper()
+    s_ops = []
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):  # maybe 'imm'
+            s_ops += ["{}:${}".format("Br" + prmobj.label, value)]
+        elif isinstance(value, int):
+            s_ops += [str(value)]
+        else:
+            s_ops += [value.label.upper()]
+    s = s + " " + ', '.join(s_ops)
+    return s
+
+
+def estimate_pseudo_call_dag(isa, call_ops):
+    call_op = call_ops["call"][0]
+    call_op, operands = call_op
+    s = call_op.__name__.upper()
+    s_ops = []
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):  # maybe 'imm'
+            # s_ops += ["call_symbol:$func"]
+            s_ops += ["{}:$func".format("Br" + prmobj.label)]
+        elif isinstance(value, int):
+            s_ops += [str(value)]
+        else:
+            s_ops += [value.label.upper()]
+    s = s + " " + ', '.join(s_ops)
+    return s
+
+
+def estimate_pseudo_callind_dag(isa, call_ops):
+    call_op = call_ops["callind"][0]
+    call_op, operands = call_op
+    s = call_op.__name__.upper()
+    s_ops = []
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):
+            s_ops += ["{}:${}".format(prmobj.label, value)]
+        elif isinstance(value, int):
+            s_ops += [str(value)]
+        else:
+            s_ops += [value.label.upper()]
+    s = s + " " + ', '.join(s_ops)
+    return s
+
+
 def estimate_copy_reg_buildmi(isa, mv_ops, addi_ops, add_ops, zeroreg):
     for ops in mv_ops:
         return ""
@@ -691,20 +744,6 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
                 sdvalues.append(sdvalue)
             codes.append((cond, vardefs, sdvalues))
     return codes
-
-
-def estimate_expand_pseudoret_codes(isa, ret_ops):
-    ret_op, operands = ret_ops[0]
-    s = "BuildMI(MBB, I, I->getDebugLoc(), get({{Xpu}}::{opname}))".format(
-        opname=ret_op.__name__.upper(),
-    )
-    for op in operands:
-        if isinstance(op, int):
-            s += ".addImm({})".format(op)
-        else:
-            s += ".addReg({{Xpu}}::{})".format(op.label.upper())
-    s += ";"
-    return s
 
 
 def estimate_getaddr_codes(isa, li_ops, phase):
@@ -1131,6 +1170,7 @@ class LLVMCompiler():
             instr_defs.append(instr_def)
 
         # gen pc manipulation ops
+        call_ops = estimate_call_ops(self.isa)
         ret_ops = estimate_ret_ops(self.isa)
 
         # prepare load immediate
@@ -1151,6 +1191,11 @@ class LLVMCompiler():
         setcc_ops = estimate_setcc_ops(self.isa)
         dags = estimate_branch_dag(self.isa, cmp_ops, br_ops, setcc_ops, reg0)
         br_dags = dags
+
+        # gen pseudocall
+        pseudo_ret_dag = estimate_pseudo_ret_dag(self.isa, ret_ops)
+        pseudo_call_dag = estimate_pseudo_call_dag(self.isa, call_ops)
+        pseudo_callind_dag = estimate_pseudo_callind_dag(self.isa, call_ops)
 
         # llvm/lib/Target/Xpu/AsmParser/
         asm_operand_clss = []
@@ -1223,9 +1268,6 @@ class LLVMCompiler():
             selectaddr_imm_codes.append((cond, vardefs, sdvalues))
 
         # llvm/lib/Target/Xpu/XpuISelLowering.cpp
-        _code = estimate_expand_pseudoret_codes(self.isa, ret_ops)
-        expand_pseudoret_code = _code.format(Xpu=self.namespace)
-
         _codes = estimate_getaddr_codes(self.isa, li_ops, phase='la')  # lla, lga, la
         getaddr_la_sdvalue_codes = []
         for code in _codes:
@@ -1248,6 +1290,9 @@ class LLVMCompiler():
             "gen_li_defs": gen_li_defs,
             "li32_dag": li32_dag,
             "br_dags": br_dags,
+            "pseudo_ret_dag": pseudo_ret_dag,
+            "pseudo_call_dag": pseudo_call_dag,
+            "pseudo_callind_dag": pseudo_callind_dag,
 
             "instr_bitsizes": instr_bitsizes,
 
@@ -1270,7 +1315,6 @@ class LLVMCompiler():
             "selectaddr_addr_imm_codes": selectaddr_addr_imm_codes,
             "selectaddr_imm_codes": selectaddr_imm_codes,
 
-            "expand_pseudoret_code": expand_pseudoret_code,
             "getaddr_la_sdvalue_codes": getaddr_la_sdvalue_codes,
             "cc_to_br_codes": cc_to_br_codes,
         }

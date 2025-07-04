@@ -17,7 +17,7 @@ class {{ Xpu }}InstrInfo : public {{ Xpu }}GenInstrInfo {
 public:
   {{ Xpu }}InstrInfo({{ Xpu }}Subtarget &STI);
 
-  bool expandPostRAPseudo(MachineInstr &MI) const override;
+  // bool expandPostRAPseudo(MachineInstr &MI) const override;
 
   void addImmediate(Register DstReg, Register SrcReg, int64_t Amount,
                     MachineBasicBlock &MBB,
@@ -65,7 +65,7 @@ protected:
   const {{ Xpu }}Subtarget &STI;
 
 private:
-  void expandPseudoRET(MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const;
+  // void expandPseudoXXX(MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const;
 };
 }
 

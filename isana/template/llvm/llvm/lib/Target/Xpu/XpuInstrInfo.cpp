@@ -22,29 +22,30 @@ using namespace llvm;
     : {{ Xpu }}GenInstrInfo({{ Xpu }}::ADJCALLSTACKDOWN, {{ Xpu }}::ADJCALLSTACKUP),
       STI(STI) {}
 
-bool
-{{ Xpu }}InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
-  auto &MBB = *MI.getParent();
+// bool
+// {{ Xpu }}InstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
+//   auto &MBB = *MI.getParent();
+// 
+//   switch(MI.getDesc().getOpcode()) {
+//     default:
+//       return false;
+//     case {{ Xpu }}::PseudoXXX:
+//       expandPseudoXXX(MBB, MI);
+//       break;
+//   }
+// 
+//   MBB.erase(MI);
+//   return true;
+// }
 
-  switch(MI.getDesc().getOpcode()) {
-    default:
-      return false;
-    case {{ Xpu }}::PseudoRET:
-      expandPseudoRET(MBB, MI);
-      break;
-  }
-
-  MBB.erase(MI);
-  return true;
-}
-
-void
-{{ Xpu }}InstrInfo::expandPseudoRET(
-  MachineBasicBlock &MBB,
-  MachineBasicBlock::iterator I
-) const {
-  {{ expand_pseudoret_code }}
-}
+// void
+// {{ Xpu }}InstrInfo::expandPseudoXXX(
+//   MachineBasicBlock &MBB,
+//   MachineBasicBlock::iterator I
+// ) const {
+//   // BuildMI(MBB, I, I->getDebugLoc(), get({{ Xpu }}::XXX))
+//   //   .addReg({{ Xpu }}::X0).addReg({{ Xpu }}::X1).addImm(0);
+// }
 
 void
 {{ Xpu }}InstrInfo::addImmediate(
