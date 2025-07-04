@@ -33,10 +33,22 @@ class InstrAssrr(Instruction):
     bin = binary("$opc[31:24], $ra[3:0], $rb[3:0], $opc[15:12], $opc[11:0]")
 
 
+class InstrAj(Instruction):
+    prm = parameter("", "rb:GPR")
+    asm = assembly("$opn $rb")
+    bin = binary("$opc[31:24], $opc[23:20], $rb[3:0], $opc[15:0]")
+
+
 class InstrL(Instruction):
     prm = parameter("ra:GPR", "rb:GPR, cx:ImmS16")
     asm = assembly("$opn $ra, $rb, $cx")
     bin = binary("$opc[31:24], $ra[3:0], $rb[3:0], $cx[15:0]")
+
+
+class InstrLJ(Instruction):
+    prm = parameter("", "ra:GPR")
+    asm = assembly("$opn $ra")
+    bin = binary("$opc[31:24], $ra[3:0], $opc[19:16], $opc[15:0]")
 
 
 class InstrJ(Instruction):
@@ -418,8 +430,8 @@ class jmp(InstrJ):
         ctx.C0R.pc += ins.cx
 
 
-class jalr(InstrJ):
-    opn, opc = "JALR", 0b00111001_0000_0000_0000_000000000000
+class jalr(InstrAj):
+    opn, opc = "JALR", 0b00111001_1110_0000_0000_000000000000
 
     def semantic(self, ctx, ins):
         ctx.GPR[14] = ctx.C0R.pc
@@ -442,7 +454,7 @@ class jsub(InstrJ):
         ctx.C0R.pc += ins.cx
 
 
-class jr(InstrJ):
+class jr(InstrLJ):
     opn, opc = "JR", 0b00111100_0000_0000_0000_000000000000
     is_return = True
 

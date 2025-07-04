@@ -174,6 +174,43 @@ def _match_ast_line(src_ites, dst_ites):
     return mobj
 
 
+class NameReplacer(ast.NodeTransformer):
+    def __init__(self, srcids, dstasts):
+        super().__init__()
+        self.srcids = srcids
+        self.dstasts = dstasts
+
+    def visit_Name(self, node):
+        if node.id in self.srcids and node.id in self.dstasts:
+            return self.dstasts[node.id]
+        return node
+
+
+def resolve_unknown_variable(tgtast, semantic):
+    # TODO: This is temporary impl. So make IR for resolve variable correctly.
+    if type(tgtast) is ast.Module:
+        tgtast = tgtast.body[0]
+    if type(tgtast) is ast.Expr:
+        tgtast = tgtast.value
+    code = inspect.getsource(semantic)
+    code = dedent(code)
+    var_asts = {}
+    for line_ast in ast.parse(code).body[0].body:
+        if type(line_ast) is not ast.Assign:
+            continue
+        if len(line_ast.targets) == 1 and type(line_ast.targets[0]) is ast.Name:
+            name = line_ast.targets[0].id
+            var_ast = line_ast.value
+            var_asts[name] = var_ast
+    tgt_names = []
+    for node in ast.walk(tgtast):
+        if type(node) is ast.Name:
+            tgt_names.append(node.id)
+    transformer = NameReplacer(tgt_names, var_asts)
+    new_tgtast = transformer.visit(tgtast)
+    return new_tgtast
+
+
 def may_change_pc_absolute(instr):
     def pcabs_semantic(self, ctx, ins):
         PickAny.pc = PickAny
@@ -254,6 +291,54 @@ def may_take_memory_address(semantic):
     else:
         return False
     return True
+
+
+def estimate_ret_ops(isa):
+    zero = None
+    ra = None
+    gpr = next(filter(lambda rg: rg.label == "GPR", isa.registers), None)
+    if gpr:
+        for reg in gpr.regs:
+            if zero is None and (reg.is_zero):
+                zero = reg
+            if ra is None and (reg.is_return_address):
+                ra = reg
+    instrs = []
+    for instr in isa.instructions:
+        if type(instr.is_return) is bool and instr.is_return:
+            instrs.append(instr)
+    for instr in isa.instructions:
+        if m := may_change_pc_absolute(instr):
+            tgtast = ast.parse(m)
+            tgtast = resolve_unknown_variable(tgtast, instr.semantic)
+            if type(tgtast) is ast.BinOp:
+                pc_change_reg = tgtast.left
+            else:
+                pc_change_reg = tgtast
+            # pc_change_regname = pc_change_reg.slice.attr
+            pc_change_reggrp = pc_change_reg.value.attr
+            if pc_change_reggrp == ra.group.label and instr not in instrs:
+                instrs.append(instr)
+    ret_ops = []
+    for instr in instrs:
+        ra_matched = False
+        operands = []
+        for asm in instr.asm.ast:
+            if asm[0] == '$' and asm != '$opn':
+                label = asm[1:]
+                prmobj = isa.get_param_obj(label, instr)
+                if label in instr.params.outputs and isinstance(prmobj, type(zero.group)):
+                    operands.append(zero)
+                elif label in instr.params.inputs:
+                    if isinstance(prmobj, type(ra.group)):
+                        if not ra_matched:
+                            operands.append(ra)
+                        else:
+                            operands.append(zero)
+                    else:
+                        operands.append(0)
+        ret_ops.append((instr, operands))
+    return ret_ops
 
 
 def unsigned():

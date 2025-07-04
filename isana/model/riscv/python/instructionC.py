@@ -5,7 +5,7 @@ from .defs import xlen
 # from .memory import Mem
 # from .register import GPR, GPRC, CSR, PCR
 from .instructionType import (
-    InstrCR, InstrCI01, InstrCI10, InstrCSS, InstrCIW, InstrCL, InstrCS,
+    InstrCR, InstrCRJ, InstrCI01, InstrCI10, InstrCSS, InstrCIW, InstrCL, InstrCS,
     InstrCA, InstrCB, InstrCBBranch, InstrCJ, InstrCLB, InstrCSB, InstrCLH,
     InstrCSH, InstrCU, InstrCMMV, InstrCMJT, InstrCMPP,
 )
@@ -268,14 +268,12 @@ class c_ldsp(InstrCI10):
     is_pop = True
 
 
-class c_jr(InstrCR):
+class c_jr(InstrCRJ):
     opn, opc = "c.jr", 0b1000_00000_00000_10
-    asm = assembly("$opn $rdrs1")
-    bin = binary("$opc[15:12], $rdrs1[4:0], $opc[6:2], $opc[1:0]")
     is_indirect = True
 
     def semantic(self, ctx, ins):
-        t = ctx.GPR[ins.rdrs1]
+        t = ctx.GPR[ins.rs1]
         ctx.PCR.pc = t + ins.imm
 
     @property
@@ -297,17 +295,15 @@ class c_ebreak(InstrCR):
     bin = binary("$opc[15:0]")
 
 
-class c_jalr(InstrCR):
+class c_jalr(InstrCRJ):
     opn, opc = "c.jalr", 0b1001_00000_00000_10
-    asm = assembly("$opn $rdrs1")
-    bin = binary("$opc[15:12], $rdrs1[4:0], $opc[6:2], $opc[1:0]")
     is_call = True
     is_indirect = True
 
     def semantic(self, ctx, ins):
-        t = ctx.GPR[ins.rdrs1]
+        t = ctx.GPR[ins.rs1]
         ctx.GPR[1] = ctx.PCR.pc + 4
-        ctx.PCR.pc = t + ins.imm
+        ctx.PCR.pc = t
 
 
 class c_add(InstrCR):

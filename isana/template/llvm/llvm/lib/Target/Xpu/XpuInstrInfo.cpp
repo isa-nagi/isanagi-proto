@@ -43,8 +43,7 @@ void
   MachineBasicBlock &MBB,
   MachineBasicBlock::iterator I
 ) const {
-  BuildMI(MBB, I, I->getDebugLoc(), get({{ Xpu }}::JALR))
-    .addReg({{ Xpu }}::X0).addReg({{ Xpu }}::X1).addImm(0);
+  {{ expand_pseudoret_code }}
 }
 
 void

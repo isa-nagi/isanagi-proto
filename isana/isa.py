@@ -215,6 +215,35 @@ class ISA():
 
     _decode0 = _decode_simple
 
+    def assemble(self, s):
+        alias_ops = re.split(r"\s*,?\s+", s)
+        instr = next(filter(lambda x: x.opn == alias_ops[0], self.instructions), None)
+        if instr is None:
+            return None
+        dstnode = []
+        instr_ops = re.split(r"\s*,?\s+", instr.asm.pattern)
+        dstnode.append(instr.__name__.upper())
+        alias_ops = [op.strip("()")for op in alias_ops][1:]
+        instr_ops = [op.strip("()")for op in instr_ops][1:]
+        instr_op_labels = [op if op[0] != "$" else op[1:] for op in instr_ops]
+        params = []
+        for prm in list(instr.prm.outputs.keys()) + list(instr.prm.inputs.keys()):
+            if prm not in params:
+                params.append(prm)
+        for i, prm in enumerate(params):
+            idx = instr_op_labels.index(prm)
+            if alias_ops[idx][0] == "$":
+                label = alias_ops[idx][1:]
+                prmobj = self.get_param_obj(instr_ops[idx][1:], instr)
+                cls = prmobj.label
+                if isinstance(prmobj, Immediate):
+                    if may_change_pc_relative(instr):
+                        cls = "Br" + cls
+                dstnode.append("{}:${}".format(cls, label))
+            else:
+                dstnode.append(alias_ops[idx].upper())
+        return dstnode
+
     def new_context(self):
         ctx = self.context(
             registers=copy.deepcopy(self.registers),

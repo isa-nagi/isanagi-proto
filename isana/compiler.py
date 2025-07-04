@@ -7,6 +7,7 @@ from isana.semantic import (
     may_change_pc_relative,
     may_take_memory_address,
     get_alu_dag,
+    estimate_ret_ops,
     estimate_load_immediate_ops,
     estimate_compare_branch_ops,
     estimate_branch_ops,
@@ -284,9 +285,10 @@ def get_instr_alias(alias, isa):
                 dstnode.append("{}:${}".format(cls, label))
             else:
                 dstnode.append(alias_ops[idx].upper())
-        dstnode = "({} {})".format(dstnode[0], ", ".join(dstnode[1:]))
-        s = 'InstAlias<"{}", {}>'.format(srcstr, dstnode)
-        return s
+        return (srcstr, dstnode)
+        # dstnode = "({} {})".format(dstnode[0], ", ".join(dstnode[1:]))
+        # s = 'InstAlias<"{}", {}>'.format(srcstr, dstnode)
+        # return s
 
 
 def _gen_sdnodexform(imm, signed_lower=False):
@@ -689,6 +691,20 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
                 sdvalues.append(sdvalue)
             codes.append((cond, vardefs, sdvalues))
     return codes
+
+
+def estimate_expand_pseudoret_codes(isa, ret_ops):
+    ret_op, operands = ret_ops[0]
+    s = "BuildMI(MBB, I, I->getDebugLoc(), get({{Xpu}}::{opname}))".format(
+        opname=ret_op.__name__.upper(),
+    )
+    for op in operands:
+        if isinstance(op, int):
+            s += ".addImm({})".format(op)
+        else:
+            s += ".addReg({{Xpu}}::{})".format(op.label.upper())
+    s += ";"
+    return s
 
 
 def estimate_getaddr_codes(isa, li_ops, phase):
@@ -1114,6 +1130,9 @@ class LLVMCompiler():
 
             instr_defs.append(instr_def)
 
+        # gen pc manipulation ops
+        ret_ops = estimate_ret_ops(self.isa)
+
         # prepare load immediate
         li_ops = estimate_load_immediate_ops(self.isa)
 
@@ -1164,6 +1183,9 @@ class LLVMCompiler():
         for alias in self.isa.instruction_aliases:
             instr_alias = get_instr_alias(alias, self.isa)
             if instr_alias:
+                srcstr, dstnode = instr_alias
+                dstnode = "({} {})".format(dstnode[0], ", ".join(dstnode[1:]))
+                instr_alias = 'InstAlias<"{}", {}>'.format(srcstr, dstnode)
                 instr_aliases.append(instr_alias)
 
         # llvm/lib/Target/Xpu/XpuInstrInfo.cpp
@@ -1201,6 +1223,9 @@ class LLVMCompiler():
             selectaddr_imm_codes.append((cond, vardefs, sdvalues))
 
         # llvm/lib/Target/Xpu/XpuISelLowering.cpp
+        _code = estimate_expand_pseudoret_codes(self.isa, ret_ops)
+        expand_pseudoret_code = _code.format(Xpu=self.namespace)
+
         _codes = estimate_getaddr_codes(self.isa, li_ops, phase='la')  # lla, lga, la
         getaddr_la_sdvalue_codes = []
         for code in _codes:
@@ -1245,6 +1270,7 @@ class LLVMCompiler():
             "selectaddr_addr_imm_codes": selectaddr_addr_imm_codes,
             "selectaddr_imm_codes": selectaddr_imm_codes,
 
+            "expand_pseudoret_code": expand_pseudoret_code,
             "getaddr_la_sdvalue_codes": getaddr_la_sdvalue_codes,
             "cc_to_br_codes": cc_to_br_codes,
         }
