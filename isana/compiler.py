@@ -599,6 +599,29 @@ def estimate_copy_reg_buildmi(isa, mv_ops, addi_ops, add_ops, zeroreg):
         return buildmi
 
 
+def estimate_mc_expand_call_codes(isa, call_ops):
+    call_op, operands = call_ops["call"][0]
+    s = "TmpInst = MCInstBuilder({{Xpu}}::{opname})".format(
+        opname=call_op.__name__.upper(),
+    )
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):  # maybe 'imm'
+            s += "addExpr(CallExpr)"
+        elif isinstance(value, int):
+            s += "addImm({})".format(value)
+        else:
+            s += "addReg({{Xpu}}::{})".format(value.label.upper())
+    s += ";"
+
+    ss = [
+        s,
+        "Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);",
+        "support::endian::write(CB, Binary, llvm::endianness::little);",
+    ]
+    return ss
+
+
 def estimate_add_immediate_codes(isa, li_ops):
     def get_cond(imm):
         cond = "!(Amount & {mask}) && ({minv} <= (Amount>>{shift})) && ((Amount>>{shift}) <= {maxv})".format(
@@ -1245,7 +1268,7 @@ class LLVMCompiler():
                 )
                 asm_operand_clss.append(asm_operand_cls)
 
-        # llvm/lib/Target/Xpu/MCTargetDesc/AsmBackend.cpp
+        # llvm/lib/Target/Xpu/MCTargetDesc/XpuAsmBackend.cpp
         if len(self.fixups) > 0:
             fixups = self.fixups[:]
         else:
@@ -1270,6 +1293,13 @@ class LLVMCompiler():
                 dstnode = "({} {})".format(dstnode[0], ", ".join(dstnode[1:]))
                 instr_alias = 'InstAlias<"{}", {}>'.format(srcstr, dstnode)
                 instr_aliases.append(instr_alias)
+
+        # llvm/lib/Target/Xpu/MCTargetDesc/XpuMCCodeEmitter.cpp
+        _codes = estimate_mc_expand_call_codes(self.isa, call_ops)
+        mc_call_codes = []
+        for line in _codes:
+            line = line.format(Xpu=self.namespace)
+            mc_call_codes.append(line)
 
         # llvm/lib/Target/Xpu/XpuInstrInfo.cpp
         _codes = estimate_add_immediate_codes(self.isa, li_ops)
@@ -1347,6 +1377,8 @@ class LLVMCompiler():
             "fixup_relocs": fixup_relocs,
 
             "instr_aliases": instr_aliases,
+
+            "mc_call_codes": mc_call_codes,
 
             "addimm_codes": addimm_codes,
             "copy_reg_buildmi": copy_reg_buildmi,

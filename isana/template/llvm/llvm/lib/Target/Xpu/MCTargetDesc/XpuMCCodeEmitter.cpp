@@ -116,9 +116,9 @@ void
   // short jump
   // jal x1, $func    | jal x1, 0
   //                  |   + fixup:pc_rel
-  TmpInst = MCInstBuilder({{ Xpu }}::JAL).addReg(Ra).addExpr(CallExpr);
-  Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
-  support::endian::write(CB, Binary, llvm::endianness::little);
+  {% for line in mc_call_codes %}
+  {{ line }}
+  {%- endfor %}
 }
 
 unsigned
