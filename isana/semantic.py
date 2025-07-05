@@ -294,6 +294,67 @@ def may_take_memory_address(semantic):
     return True
 
 
+def estimate_jump_ops(isa):
+    zero = None
+    gpr = next(filter(lambda rg: rg.label == "GPR", isa.registers), None)
+    if gpr:
+        for reg in gpr.regs:
+            if zero is None and (reg.is_zero):
+                zero = reg
+    instrs = []
+    for instr in isa.instructions:
+        if type(instr.is_jump) is bool and instr.is_jump:
+            if type(instr.is_indirect) is bool and not instr.is_indirect:
+                instrs.append((instr, False))  # jump
+            elif type(instr.is_indirect) is bool and instr.is_indirect:
+                instrs.append((instr, True))  # jumpind
+    for instr in isa.instructions:
+        if may_change_pc_absolute(instr):
+            if (instr, True) not in instrs:
+                instrs.append((instr, True))  # jumpind
+        elif may_change_pc_relative(instr):
+            if may_branch(instr.semantic) or may_ubranch(instr.semantic):
+                continue
+            if may_compare_branch(instr.semantic):
+                continue
+            if (instr, False) not in instrs:
+                instrs.append((instr, False))  # jump
+    def imm_width(x):
+        instr, is_indirect = x
+        for param in instr.params.inputs.values():
+            if isa.is_imm_type(param.type_):
+                prmobj = isa.get_param_obj(param.label, instr)
+                return prmobj.width
+        return sys.maxsize
+    instrs.sort(key=imm_width, reverse=True)
+    jump_ops = {"jump": [], "jumpind": []}
+    for instr, is_indirect in instrs:
+        operands = []
+        for asm in instr.asm.ast:
+            if asm[0] == '$' and asm != '$opn':
+                label = asm[1:]
+                prmobj = isa.get_param_obj(label, instr)
+                if label in instr.params.outputs:
+                    if isa.is_reg_type(instr.params.outputs[label].type_):
+                        operands.append((prmobj, zero))
+                    else:
+                        operands.append((prmobj, 0))
+                elif label in instr.params.inputs:
+                    if is_indirect:
+                        if isa.is_reg_type(instr.params.inputs[label].type_):
+                            operands.append((prmobj, label))
+                        else:
+                            operands.append((prmobj, 0))
+                    else:
+                        if isa.is_reg_type(instr.params.inputs[label].type_):
+                            operands.append((prmobj, zero))
+                        else:
+                            operands.append((prmobj, label))
+        key = "jumpind" if is_indirect else "jump"
+        jump_ops[key].append((instr, operands))
+    return jump_ops
+
+
 def estimate_call_ops(isa):
     zero = None
     ra = None
@@ -324,8 +385,10 @@ def estimate_call_ops(isa):
             if pc_change_reggrp == ra.group.label:
                 if (instr, True) not in instrs:
                     instrs.append((instr, True))  # callind
-        elif m := may_change_pc_relative(instr):
+        elif may_change_pc_relative(instr):
             if may_branch(instr.semantic) or may_ubranch(instr.semantic):
+                continue
+            if may_compare_branch(instr.semantic):
                 continue
             if (instr, False) not in instrs:
                 instrs.append((instr, False))  # call
@@ -344,16 +407,17 @@ def estimate_call_ops(isa):
             if asm[0] == '$' and asm != '$opn':
                 label = asm[1:]
                 prmobj = isa.get_param_obj(label, instr)
-                if label in instr.params.outputs and isinstance(prmobj, type(ra.group)):
-                    operands.append((prmobj, ra))
+                if label in instr.params.outputs:
+                    if isa.is_reg_type(instr.params.outputs[label].type_):
+                        operands.append((prmobj, ra))
                 elif label in instr.params.inputs:
                     if is_indirect:
-                        if isinstance(prmobj, type(ra.group)):
+                        if isa.is_reg_type(instr.params.inputs[label].type_):
                             operands.append((prmobj, label))
                         else:
                             operands.append((prmobj, 0))
                     else:
-                        if isinstance(prmobj, type(ra.group)):
+                        if isa.is_reg_type(instr.params.inputs[label].type_):
                             operands.append((prmobj, zero))
                         else:
                             operands.append((prmobj, label))

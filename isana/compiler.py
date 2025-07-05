@@ -7,6 +7,7 @@ from isana.semantic import (
     may_change_pc_relative,
     may_take_memory_address,
     get_alu_dag,
+    estimate_jump_ops,
     estimate_call_ops,
     estimate_ret_ops,
     estimate_load_immediate_ops,
@@ -479,6 +480,40 @@ def estimate_branch_dag(isa, cmp_ops, br_ops, setcc_ops, zeroreg):
             dags.append(pat)
 
     return dags
+
+
+def estimate_pseudo_jump_dag(isa, jump_ops):
+    jump_op = jump_ops["jump"][0]
+    jump_op, operands = jump_op
+    s = jump_op.__name__.upper()
+    s_ops = []
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):  # maybe 'imm'
+            s_ops += ["{}:${}".format("Br" + prmobj.label, value)]
+        elif isinstance(value, int):
+            s_ops += [str(value)]
+        else:
+            s_ops += [value.label.upper()]
+    s = s + " " + ', '.join(s_ops)
+    return s
+
+
+def estimate_pseudo_jumpind_dag(isa, jump_ops):
+    jump_op = jump_ops["jumpind"][0]
+    jump_op, operands = jump_op
+    s = jump_op.__name__.upper()
+    s_ops = []
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):
+            s_ops += ["{}:${}".format(prmobj.label, value)]
+        elif isinstance(value, int):
+            s_ops += [str(value)]
+        else:
+            s_ops += [value.label.upper()]
+    s = s + " " + ', '.join(s_ops)
+    return s
 
 
 def estimate_pseudo_ret_dag(isa, ret_ops):
@@ -1170,6 +1205,7 @@ class LLVMCompiler():
             instr_defs.append(instr_def)
 
         # gen pc manipulation ops
+        jump_ops = estimate_jump_ops(self.isa)
         call_ops = estimate_call_ops(self.isa)
         ret_ops = estimate_ret_ops(self.isa)
 
@@ -1193,6 +1229,8 @@ class LLVMCompiler():
         br_dags = dags
 
         # gen pseudocall
+        pseudo_jump_dag = estimate_pseudo_jump_dag(self.isa, jump_ops)
+        pseudo_jumpind_dag = estimate_pseudo_jumpind_dag(self.isa, jump_ops)
         pseudo_ret_dag = estimate_pseudo_ret_dag(self.isa, ret_ops)
         pseudo_call_dag = estimate_pseudo_call_dag(self.isa, call_ops)
         pseudo_callind_dag = estimate_pseudo_callind_dag(self.isa, call_ops)
@@ -1290,6 +1328,8 @@ class LLVMCompiler():
             "gen_li_defs": gen_li_defs,
             "li32_dag": li32_dag,
             "br_dags": br_dags,
+            "pseudo_jump_dag": pseudo_jump_dag,
+            "pseudo_jumpind_dag": pseudo_jumpind_dag,
             "pseudo_ret_dag": pseudo_ret_dag,
             "pseudo_call_dag": pseudo_call_dag,
             "pseudo_callind_dag": pseudo_callind_dag,

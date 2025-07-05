@@ -163,7 +163,7 @@ def PseudoBR: {{ Xpu }}Inst<
   (outs), (ins BrImmS20O1:$imm),
   "",
   [(br bb:$imm)]>,
-  PseudoInstExpansion<(JAL X0, BrImmS20O1:$imm)>
+  PseudoInstExpansion<({{ pseudo_jump_dag }})>
 {
   let isPseudo = 1;
   let isCodeGenOnly = 1;
@@ -180,7 +180,7 @@ def PseudoBRIND: {{ Xpu }}Inst<
   (outs), (ins GPR:$rs1, ImmS12:$imm),
   "",
   []>,
-  PseudoInstExpansion<(JALR X0, GPR:$rs1, ImmS12:$imm)>
+  PseudoInstExpansion<({{ pseudo_jumpind_dag }})>
 {
   let isPseudo = 1;
   let isCodeGenOnly = 1;
@@ -190,7 +190,7 @@ def PseudoBRIND: {{ Xpu }}Inst<
   let isTerminator = 1;
 }
 def : Pat<(brind GPR:$rs1), (PseudoBRIND GPR:$rs1, 0)>;
-def : Pat<(brind (add GPR:$rs1, ImmS12:$imm)), (PseudoBRIND GPR:$rs1, ImmS12:$imm)>;
+//def : Pat<(brind (add GPR:$rs1, ImmS12:$imm)), (PseudoBRIND GPR:$rs1, ImmS12:$imm)>;
 
 def SDT_{{ Xpu }}SelectCC : SDTypeProfile<1, 5, [SDTCisSameAs<1, 2>,
                                                  SDTCisSameAs<0, 4>,
