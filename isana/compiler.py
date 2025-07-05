@@ -14,6 +14,8 @@ from isana.semantic import (
     estimate_compare_branch_ops,
     estimate_branch_ops,
     estimate_setcc_ops,
+    estimate_load_ops,
+    estimate_store_ops,
 )
 from isana.isa import (
     Immediate,
@@ -482,6 +484,120 @@ def estimate_branch_dag(isa, cmp_ops, br_ops, setcc_ops, zeroreg):
     return dags
 
 
+def estimate_load_dag(isa, load_ops):
+    def_load_dags = []
+    pat_load_dags = []
+    load_srcop_table = {
+        "load8": ["sextloadi8 ", " extloadi8 "],
+        "load16": ["sextloadi16", " extloadi16"],
+        "load32": ["    load   "],
+        # "load32": ["    load   ", "sextloadi32", " extloadi32"],  # 64bit support
+        "uload8": ["zextloadi8 "],
+        "uload16": ["zextloadi16"],
+        "uload32": ["zextloadi32"],
+    }
+    for key, load_op_list in load_ops.items():
+        if not load_op_list:
+            continue
+        load_op, dst_name, memobj, bitwidth, addrinfo = load_op_list[0]
+        outs = []
+        for label, param in load_op.params.outputs.items():
+            out_ = "{}:$dst".format(param.type_)
+            outs.append(out_)
+        ins = []
+        for label, param in load_op.params.inputs.items():
+            if isa.is_reg_type(param.type_):
+                ins.append("{}:$addr".format(param.type_))
+            else:
+                ins.append("Imm:$offset")
+        s = 'def PseudoFI_{opname} : {{Xpu}}Inst<(outs {outs}), (ins {ins}), "", []>;'.format(
+            opname=load_op.__name__.upper(),
+            outs=', '.join(outs),
+            ins=', '.join(ins),
+        )
+        def_load_dags.append(s)
+
+        reg1_prmobj = isa.get_param_obj(addrinfo[0], load_op)
+        for srcopname in load_srcop_table[key]:
+            s = 'def : Pat<({srcopname} (AddrReg {reg1}:$rs1, Imm:$imm)), '.format(
+                srcopname=srcopname,
+                reg1=reg1_prmobj.label,
+            )
+            s += '({opname} {reg1}:$rs1, Imm:$imm)>;'.format(
+                opname=load_op.__name__.upper(),
+                reg1=reg1_prmobj.label,
+            )
+            pat_load_dags.append(s)
+            s = 'def : Pat<({srcopname} (FIAddr  {reg1}:$rs1, Imm:$imm)), '.format(
+                srcopname=srcopname,
+                reg1=reg1_prmobj.label,
+            )
+            s += '(PseudoFI_{opname} {reg1}:$rs1, Imm:$imm)>;'.format(
+                opname=load_op.__name__.upper(),
+                reg1=reg1_prmobj.label,
+            )
+            pat_load_dags.append(s)
+    return (def_load_dags, pat_load_dags)
+
+
+def estimate_store_dag(isa, store_ops):
+    def_store_dags = []
+    pat_store_dags = []
+    store_srcop_table = {
+        "store8": ["truncstorei8 "],
+        "store16": ["truncstorei16"],
+        "store32": ["     store   "],
+        # "store32": ["     store   ", "truncstorei32", " truncstorei32"],  # 64bit support
+    }
+    for key, store_op_list in store_ops.items():
+        if not store_op_list:
+            continue
+        store_op, src_name, memobj, bitwidth, addrinfo = store_op_list[0]
+        outs = []
+        ins = []
+        for label, param in store_op.params.inputs.items():
+            if isa.is_reg_type(param.type_):
+                if label == src_name:
+                    ins.append("{}:${}".format(param.type_, label))
+                else:
+                    ins.append("{}:$addr".format(param.type_))
+            else:
+                ins.append("Imm:$offset")
+        s = 'def PseudoFI_{opname} : {{Xpu}}Inst<(outs {outs}), (ins {ins}), "", []>;'.format(
+            opname=store_op.__name__.upper(),
+            outs=', '.join(outs),
+            ins=', '.join(ins),
+        )
+        def_store_dags.append(s)
+
+        reg2_prmobj = isa.get_param_obj(src_name, store_op)
+        reg1_prmobj = isa.get_param_obj(addrinfo[0], store_op)
+        for srcopname in store_srcop_table[key]:
+            s = 'def : Pat<({srcopname} {reg2}:$rs2, (AddrReg {reg1}:$rs1, Imm:$imm)), '.format(
+                srcopname=srcopname,
+                reg2=reg2_prmobj.label,
+                reg1=reg1_prmobj.label,
+            )
+            s += '({opname} {reg2}:$rs2, {reg1}:$rs1, Imm:$imm)>;'.format(
+                opname=store_op.__name__.upper(),
+                reg2=reg2_prmobj.label,
+                reg1=reg1_prmobj.label,
+            )
+            pat_store_dags.append(s)
+            s = 'def : Pat<({srcopname} {reg2}:$rs2, (FIAddr  {reg1}:$rs1, Imm:$imm)), '.format(
+                srcopname=srcopname,
+                reg2=reg2_prmobj.label,
+                reg1=reg1_prmobj.label,
+            )
+            s += '(PseudoFI_{opname} {reg2}:$rs2, {reg1}:$rs1, Imm:$imm)>;'.format(
+                opname=store_op.__name__.upper(),
+                reg2=reg2_prmobj.label,
+                reg1=reg1_prmobj.label,
+            )
+            pat_store_dags.append(s)
+    return (def_store_dags, pat_store_dags)
+
+
 def estimate_pseudo_jump_dag(isa, jump_ops):
     jump_op = jump_ops["jump"][0]
     jump_op, operands = jump_op
@@ -607,11 +723,11 @@ def estimate_mc_expand_call_codes(isa, call_ops):
     for op in operands:
         prmobj, value = op
         if isinstance(value, str):  # maybe 'imm'
-            s += "addExpr(CallExpr)"
+            s += ".addExpr(CallExpr)"
         elif isinstance(value, int):
-            s += "addImm({})".format(value)
+            s += ".addImm({})".format(value)
         else:
-            s += "addReg({{Xpu}}::{})".format(value.label.upper())
+            s += ".addReg({{Xpu}}::{})".format(value.label.upper())
     s += ";"
 
     ss = [
@@ -862,6 +978,48 @@ def estimate_condcode_to_br_codes(isa, br_ops):
         brop = '{{Xpu}}::{}'.format(brop.__name__.upper())
         codes.append((condcode, brop))
     return codes
+
+
+def estimate_emit_frameindex_codes(isa, li_ops, load_ops, store_ops):
+    load_maps = []
+    for key, load_op_list in load_ops.items():
+        if not load_op_list:
+            continue
+        load_op, dst_name, memobj, bitwidth, addrinfo = load_op_list[0]
+        s = "LoadMap.insert(std::make_pair({{Xpu}}::PseudoFI_{op}, {{Xpu}}::{op}));".format(
+            op=load_op.__name__.upper(),
+        )
+        load_maps.append(s)
+    load_buildmi = [
+        "BuildMI(MBB, MBBI, DL, TII->get(LoadMap[MI.getOpcode()]), MI.getOperand(0).getReg())"
+    ]
+    for i, param in enumerate(load_op.params.inputs.values()):
+        if isa.is_reg_type(param.type_):
+            s = "  .addReg(MI.getOperand({}).getReg())".format(i + 1)
+        else:
+            s = "  .addImm(MI.getOperand({}).getImm())".format(i + 1)
+        load_buildmi.append(s)
+
+    store_maps = []
+    for key, store_op_list in store_ops.items():
+        if not store_op_list:
+            continue
+        store_op, dst_name, memobj, bitwidth, addrinfo = store_op_list[0]
+        s = "StoreMap.insert(std::make_pair({{Xpu}}::PseudoFI_{op}, {{Xpu}}::{op}));".format(
+            op=store_op.__name__.upper(),
+        )
+        store_maps.append(s)
+    store_buildmi = [
+        "BuildMI(MBB, MBBI, DL, TII->get(StoreMap[MI.getOpcode()]))"
+    ]
+    for i, param in enumerate(store_op.params.inputs.values()):
+        if isa.is_reg_type(param.type_):
+            s = "  .addReg(MI.getOperand({}).getReg())".format(i)
+        else:
+            s = "  .addImm(MI.getOperand({}).getImm())".format(i)
+        store_buildmi.append(s)
+
+    return (load_maps, store_maps, load_buildmi, store_buildmi)
 
 
 class LLVMCompiler():
@@ -1232,6 +1390,9 @@ class LLVMCompiler():
         call_ops = estimate_call_ops(self.isa)
         ret_ops = estimate_ret_ops(self.isa)
 
+        load_ops = estimate_load_ops(self.isa)
+        store_ops = estimate_store_ops(self.isa)
+
         # prepare load immediate
         li_ops = estimate_load_immediate_ops(self.isa)
 
@@ -1250,6 +1411,23 @@ class LLVMCompiler():
         setcc_ops = estimate_setcc_ops(self.isa)
         dags = estimate_branch_dag(self.isa, cmp_ops, br_ops, setcc_ops, reg0)
         br_dags = dags
+
+        # gen load/store
+        defs, pats = estimate_load_dag(self.isa, load_ops)
+        def_load_dags = []
+        for line in defs:
+            def_load_dags.append(line.format(Xpu=self.namespace))
+        pat_load_dags = []
+        for line in pats:
+            pat_load_dags.append(line.format(Xpu=self.namespace))
+
+        defs, pats = estimate_store_dag(self.isa, store_ops)
+        def_store_dags = []
+        for line in defs:
+            def_store_dags.append(line.format(Xpu=self.namespace))
+        pat_store_dags = []
+        for line in pats:
+            pat_store_dags.append(line.format(Xpu=self.namespace))
 
         # gen pseudocall
         pseudo_jump_dag = estimate_pseudo_jump_dag(self.isa, jump_ops)
@@ -1349,6 +1527,18 @@ class LLVMCompiler():
             code = (cc, br)
             cc_to_br_codes.append(code)
 
+        # llvm/lib/Target/Xpu/XpuRegisterInfo.cpp
+        _codes = estimate_emit_frameindex_codes(self.isa, li_ops, load_ops, store_ops)
+        load_maps_, store_maps_, load_buildmi_, store_buildmi_ = _codes
+        frameindex_load_maps = []
+        for line in load_maps_:
+            frameindex_load_maps.append(line.format(Xpu=self.namespace))
+        frameindex_store_maps = []
+        for line in store_maps_:
+            frameindex_store_maps.append(line.format(Xpu=self.namespace))
+        frameindex_load_buildmi = load_buildmi_
+        frameindex_store_buildmi = store_buildmi_
+
         kwargs = {
             "asm_operand_clss": asm_operand_clss,
             "operand_clss": operand_clss,
@@ -1358,6 +1548,10 @@ class LLVMCompiler():
             "gen_li_defs": gen_li_defs,
             "li32_dag": li32_dag,
             "br_dags": br_dags,
+            "def_load_dags": def_load_dags,
+            "def_store_dags": def_store_dags,
+            "pat_load_dags": pat_load_dags,
+            "pat_store_dags": pat_store_dags,
             "pseudo_jump_dag": pseudo_jump_dag,
             "pseudo_jumpind_dag": pseudo_jumpind_dag,
             "pseudo_ret_dag": pseudo_ret_dag,
@@ -1389,6 +1583,11 @@ class LLVMCompiler():
 
             "getaddr_la_sdvalue_codes": getaddr_la_sdvalue_codes,
             "cc_to_br_codes": cc_to_br_codes,
+
+            "frameindex_load_maps": frameindex_load_maps,
+            "frameindex_store_maps": frameindex_store_maps,
+            "frameindex_load_buildmi": frameindex_load_buildmi,
+            "frameindex_store_buildmi": frameindex_store_buildmi,
         }
         return kwargs
 

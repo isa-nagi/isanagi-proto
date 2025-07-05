@@ -795,3 +795,115 @@ def estimate_setcc_ops(isa):
             else:
                 setcc_s[br_ast[binop]].append((instr, dgrp, dreg, lgrp, lreg, rgrp, rreg))
     return setcc_s
+
+
+def may_load(isa, semantic):
+    def load_semantic(s, ctx, ins):
+        PickAny = ctx.PickAny.read(PickAny, PickAny)
+
+    m = _search_ast(semantic, load_semantic)
+    return m
+
+
+def may_uload(isa, semantic):
+    def uload_semantic(s, ctx, ins):
+        PickAny = unsigned(Any, ctx.PickAny.read(PickAny, PickAny))
+
+    m = _search_ast(semantic, uload_semantic)
+    return m
+
+load_table = {
+    "8": "load8",
+    "16": "load16",
+    "32": "load32",
+}
+uload_table = {
+    "8": "uload8",
+    "16": "uload16",
+    "32": "uload32",
+}
+
+def estimate_load_ops(isa):
+    load_ops = {}
+    for key in list(load_table.values()) + list(uload_table.values()):
+        load_ops[key] = list()
+    for instr in isa.instructions:
+        m1 = may_load(isa, instr.semantic)
+        m2 = may_uload(isa, instr.semantic)
+        if m1 or m2:
+            m = m2 or m1
+            is_unsigned = m == m2
+            mem = m.picks[1]
+            memobj = None
+            for mo in isa.memories:
+                if mem.attr in mo.label:
+                    memobj = mo
+                    break
+            else:
+                continue
+            bitwidth = m.picks[2].value
+            addr_ast = ast.parse(m.picks[3])
+            addr_ast = resolve_unknown_variable(addr_ast, instr.semantic)
+            if type(addr_ast) is ast.BinOp:
+                # addr = reg + imm
+                reg_name = addr_ast.left.slice.attr
+                imm_name = addr_ast.right.attr
+            else:
+                # addr = reg
+                reg_name = addr_ast.slice.attr
+                imm_name = None
+            addrinfo = (reg_name, imm_name)
+            dst_ast = ast.parse(m.picks[0])
+            dst_name = dst_ast.slice.attr
+            if is_unsigned:
+                key = uload_table[str(bitwidth)]
+            else:
+                key = load_table[str(bitwidth)]
+            load_ops[key].append((instr, dst_name, memobj, bitwidth, addrinfo))
+    return load_ops
+
+
+def may_store(isa, semantic):
+    def store_semantic(s, ctx, ins):
+        ctx.PickAny.write(PickAny, PickAny, PickAny)
+
+    m = _search_ast(semantic, store_semantic)
+    return m
+
+store_table = {
+    "8": "store8",
+    "16": "store16",
+    "32": "store32",
+}
+
+def estimate_store_ops(isa):
+    store_ops = {}
+    for key in list(store_table.values()):
+        store_ops[key] = list()
+    for instr in isa.instructions:
+        if m := may_store(isa, instr.semantic):
+            mem = m.picks[0]
+            memobj = None
+            for mo in isa.memories:
+                if mem.attr in mo.label:
+                    memobj = mo
+                    break
+            else:
+                continue
+            bitwidth = m.picks[1].value
+            addr_ast = ast.parse(m.picks[2])
+            addr_ast = resolve_unknown_variable(addr_ast, instr.semantic)
+            if type(addr_ast) is ast.BinOp:
+                # addr = reg + imm
+                reg_name = addr_ast.left.slice.attr
+                imm_name = addr_ast.right.attr
+            else:
+                # addr = reg
+                reg_name = addr_ast.slice.attr
+                imm_name = None
+            addrinfo = (reg_name, imm_name)
+            src_ast = ast.parse(m.picks[3])
+            src_name = src_ast.slice.attr
+            key = store_table[str(bitwidth)]
+            store_ops[key].append((instr, src_name, memobj, bitwidth, addrinfo))
+    return store_ops

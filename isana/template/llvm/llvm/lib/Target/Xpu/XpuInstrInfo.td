@@ -117,15 +117,12 @@ def truncstorei32_a : AlignedStore<truncstorei32>;
 
 let isPseudo = 1, isCodeGenOnly = 1 in {
   def PseudoFI_LA : {{ Xpu }}Inst<(outs GPR:$dst), (ins GPR:$addr, Imm:$offset), "",[]>;
-
-  def PseudoFI_LB : {{ Xpu }}Inst<(outs GPR:$dst), (ins GPR:$addr, Imm:$offset), "", []>;
-  def PseudoFI_LH : {{ Xpu }}Inst<(outs GPR:$dst), (ins GPR:$addr, Imm:$offset), "", []>;
-  def PseudoFI_LW : {{ Xpu }}Inst<(outs GPR:$dst), (ins GPR:$addr, Imm:$offset), "", []>;
-  def PseudoFI_LBU : {{ Xpu }}Inst<(outs GPR:$dst), (ins GPR:$addr, Imm:$offset), "", []>;
-  def PseudoFI_LHU : {{ Xpu }}Inst<(outs GPR:$dst), (ins GPR:$addr, Imm:$offset), "", []>;
-  def PseudoFI_SB : {{ Xpu }}Inst<(outs), (ins GPR:$rs2, GPR:$addr, Imm:$offset), "", []>;
-  def PseudoFI_SH : {{ Xpu }}Inst<(outs), (ins GPR:$rs2, GPR:$addr, Imm:$offset), "", []>;
-  def PseudoFI_SW : {{ Xpu }}Inst<(outs), (ins GPR:$rs2, GPR:$addr, Imm:$offset), "", []>;
+  {% for line in def_load_dags %}
+  {{ line }}
+  {%- endfor %}
+  {%- for line in def_store_dags %}
+  {{ line }}
+  {%- endfor %}
 }
 
 def FIAddr : ComplexPattern<iPTR, 2, "SelectAddrFrameIndexRegImm", [frameindex, add], []>;
@@ -133,30 +130,13 @@ def : Pat<(FIAddr (iPTR GPR:$rs1), Imm:$imm),
           (PseudoFI_LA GPR:$rs1, Imm:$imm)>;
 
 def AddrReg      : ComplexPattern<iPTR, 2, "SelectAddrRegImm", [], []>;
-
-multiclass LoadPattern<PatFrag LoadOp, {{ Xpu }}Inst Inst> {
-  def : Pat<(LoadOp (AddrReg GPR:$rs1, Imm:$imm)),
-            (Inst GPR:$rs1, Imm:$imm)>;
-  def : Pat<(LoadOp (FIAddr GPR:$rs1, Imm:$imm)),
-            (!cast<Instruction>("PseudoFI_"#Inst) GPR:$rs1, Imm:$imm)>;
-}
-multiclass StorePattern<PatFrag StoreOp, {{ Xpu }}Inst Inst, RegisterClass RC> {
-  def : Pat<(StoreOp RC:$rs2, (AddrReg GPR:$rs1, Imm:$imm)),
-            (Inst RC:$rs2, GPR:$rs1, Imm:$imm)>;
-  def : Pat<(StoreOp RC:$rs2, (FIAddr GPR:$rs1, Imm:$imm)),
-            (!cast<Instruction>("PseudoFI_"#Inst) RC:$rs2, GPR:$rs1, Imm:$imm)>;
-}
-
-defm : LoadPattern<sextloadi8 , LB>;
-defm : LoadPattern< extloadi8 , LB>;
-defm : LoadPattern<sextloadi16, LH>;
-defm : LoadPattern< extloadi16, LH>;
-defm : LoadPattern<load       , LW>;
-defm : LoadPattern<zextloadi8 , LBU>;
-defm : LoadPattern<zextloadi16, LHU>;
-defm : StorePattern<truncstorei8 , SB, GPR>;
-defm : StorePattern<truncstorei16, SH, GPR>;
-defm : StorePattern<store        , SW, GPR>;
+{# #}
+{%- for line in pat_load_dags %}
+{{ line }}
+{%- endfor %}
+{%- for line in pat_store_dags %}
+{{ line }}
+{%- endfor %}
 
 //== Branch/Jump Pattern
 def PseudoBR: {{ Xpu }}Inst<

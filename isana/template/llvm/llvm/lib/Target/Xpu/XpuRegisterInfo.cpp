@@ -97,15 +97,13 @@ bool
   }
 
   DenseMap<unsigned, unsigned> LoadMap;
-  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LB, {{ Xpu }}::LB));
-  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LH, {{ Xpu }}::LH));
-  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LW, {{ Xpu }}::LW));
-  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LBU, {{ Xpu }}::LBU));
-  LoadMap.insert(std::make_pair({{ Xpu }}::PseudoFI_LHU, {{ Xpu }}::LHU));
+  {%- for line in frameindex_load_maps %}
+  {{ line }}
+  {%- endfor %}
   DenseMap<unsigned, unsigned> StoreMap;
-  StoreMap.insert(std::make_pair({{ Xpu }}::PseudoFI_SB, {{ Xpu }}::SB));
-  StoreMap.insert(std::make_pair({{ Xpu }}::PseudoFI_SH, {{ Xpu }}::SH));
-  StoreMap.insert(std::make_pair({{ Xpu }}::PseudoFI_SW, {{ Xpu }}::SW));
+  {%- for line in frameindex_store_maps %}
+  {{ line }}
+  {%- endfor %}
 
   if (MI.getOpcode() == {{ Xpu }}::PseudoFI_LA) {
     BuildMI(MBB, MBBI, DL, TII->get({{ Xpu }}::ADDI), MI.getOperand(0).getReg())
@@ -113,15 +111,14 @@ bool
       .addImm(MI.getOperand(2).getImm());
     MI.eraseFromParent();
   } else if (LoadMap.contains(MI.getOpcode())) {
-    BuildMI(MBB, MBBI, DL, TII->get(LoadMap[MI.getOpcode()]), MI.getOperand(0).getReg())
-      .addReg(MI.getOperand(1).getReg())
-      .addImm(MI.getOperand(2).getImm());
+    {%- for line in frameindex_load_buildmi %}
+    {{ line }}
+    {%- endfor %}
     MI.eraseFromParent();
   } else if (StoreMap.contains(MI.getOpcode())) {
-    BuildMI(MBB, MBBI, DL, TII->get(StoreMap[MI.getOpcode()]))
-      .addReg(MI.getOperand(0).getReg())
-      .addReg(MI.getOperand(1).getReg())
-      .addImm(MI.getOperand(2).getImm());
+    {%- for line in frameindex_store_buildmi %}
+    {{ line }}
+    {%- endfor %}
     MI.eraseFromParent();
   }
 
