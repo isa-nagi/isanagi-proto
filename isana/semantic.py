@@ -575,7 +575,7 @@ def may_load_immediate(semantic):
 
 
 def estimate_load_immediate_ops(isa):
-    li32 = None
+    li32_s = []
     li_s = []
     lui_s = []
     addi_s = []
@@ -589,7 +589,7 @@ def estimate_load_immediate_ops(isa):
             if imm.offset == 0:
                 li_s.append((instr, imm))
                 if imm.width == 32:
-                    li32 = (instr, imm)
+                    li32_s.append((instr, imm))
             else:
                 lui_s.append((instr, imm))
             continue
@@ -607,11 +607,13 @@ def estimate_load_immediate_ops(isa):
     lui_addi_s = []
     for (lui, lui_imm) in lui_s:
         for (addi, addi_imm) in addi_s:
-            if lui_imm.offset == addi_imm.width:
+            # if lui_imm.offset == addi_imm.width:
+            if lui_imm.offset >= addi_imm.width:
                 lui_addi_s.append(((lui, lui_imm), (addi, addi_imm)))
-                if lui_imm.width + lui_imm.offset == 32 and not li32:
-                    li32 = ((lui, lui_imm), (addi, addi_imm))
-    return (li32, tuple(li_s), tuple(lui_s), tuple(addi_s), tuple(lui_addi_s), tuple(add_s))
+                if lui_imm.offset == addi_imm.width and lui_imm.width + lui_imm.offset == 32:
+                    li32_s.append(((lui, lui_imm), (addi, addi_imm)))
+    li_ops = (li32_s, tuple(li_s), tuple(lui_s), tuple(addi_s), tuple(lui_addi_s), tuple(add_s))
+    return li_ops
 
 
 def may_compare(semantic):
@@ -810,6 +812,8 @@ def may_uload(isa, semantic):
         PickAny = unsigned(Any, ctx.PickAny.read(PickAny, PickAny))
 
     m = _search_ast(semantic, uload_semantic)
+    if may_compare_branch(semantic):
+        return None
     return m
 
 load_table = {

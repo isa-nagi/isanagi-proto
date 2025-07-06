@@ -78,21 +78,19 @@ bool
   //   lui  t0, fioff_hi+spoff_hi
   //   add  dstaddr, sp, t0
   //   ld/st val, dstaddr, fioff_lo+spoff_lo
-
-  int64_t NewLo12 = SignExtend64<12>(NewOffset);
-  int64_t NewHi20 = ((NewOffset - NewLo12) >> 12);
+  {%- for line in frameindex_vardef %}
+  {{ line }}
+  {%- endfor %}
 
   MI.getOperand(i+0).ChangeToRegister(FrameReg, false);
-  MI.getOperand(i+1).ChangeToImmediate(NewLo12);
+  MI.getOperand(i+1).ChangeToImmediate(NewLo);
 
-  if (NewHi20) {
+  if (NewHi) {
     MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
     Register TempReg = MRI.createVirtualRegister(&{{ Xpu }}::GPRRegClass);
-    BuildMI(MBB, MBBI, DL, TII->get({{ Xpu }}::LUI), TempReg)
-      .addImm(NewHi20);
-    BuildMI(MBB, MBBI, DL, TII->get({{ Xpu }}::ADD), TempReg)
-      .addReg(FrameReg)
-      .addReg(TempReg);
+    {%- for line in frameindex_hiadd_buildmi %}
+    {{ line }}
+    {%- endfor %}
     MI.getOperand(i+0).ChangeToRegister(TempReg, false);
   }
 
@@ -106,9 +104,9 @@ bool
   {%- endfor %}
 
   if (MI.getOpcode() == {{ Xpu }}::PseudoFI_LA) {
-    BuildMI(MBB, MBBI, DL, TII->get({{ Xpu }}::ADDI), MI.getOperand(0).getReg())
-      .addReg(MI.getOperand(1).getReg())
-      .addImm(MI.getOperand(2).getImm());
+    {%- for line in frameindex_la_buildmi %}
+    {{ line }}
+    {%- endfor %}
     MI.eraseFromParent();
   } else if (LoadMap.contains(MI.getOpcode())) {
     {%- for line in frameindex_load_buildmi %}

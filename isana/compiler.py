@@ -319,7 +319,7 @@ def _gen_sdnodexform(imm, signed_lower=False):
 
 
 def estimate_load_immediate_dag(isa, li_ops):
-    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
     zeroreg = None
     for group in isa.registers:
         for reg in group.regs:
@@ -333,8 +333,8 @@ def estimate_load_immediate_dag(isa, li_ops):
         if imm.width == 32 and imm.offset == 0:
             imm32 = imm
             break
-    for ops in (li32,) + li_s + lui_s + addi_s:
-        if isinstance(ops[0], tuple):
+    for ops in lui_addi_s + li_s + lui_s + addi_s:
+        if ops in lui_addi_s:
             # lui
             op, lui_imm = ops[0]
             immtp = lui_imm.label
@@ -358,7 +358,7 @@ def estimate_load_immediate_dag(isa, li_ops):
                 else:
                     opstr.append(f"({lui_str})")
             opstr = op.opn.upper() + " " + ", ".join(opstr)
-            if ops == li32:
+            if ops == li32_s[0]:
                 if imm32:
                     dags.append((imm32.label, opstr))
                 else:
@@ -748,12 +748,12 @@ def estimate_add_immediate_codes(isa, li_ops):
         )
         return cond
 
-    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
     codes = list()
-    for ops in li_s + lui_s + addi_s + (li32,):
+    for ops in li_s + lui_s + addi_s + lui_addi_s:
         vardefs = []
         buildmis = []
-        if isinstance(ops[0], tuple):
+        if ops in lui_addi_s:
             lui_op, lui_imm = ops[0]
             lui_opname = lui_op.opn.upper()
             addi_op, addi_imm = ops[1]
@@ -764,16 +764,22 @@ def estimate_add_immediate_codes(isa, li_ops):
             vardef = "Register ImmReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
             vardefs.append(vardef)
             if hasattr(addi_imm, "signed"):
-                vardef = "int64_t Hi = ((Amount + {half}) >> {shift}) & {mask};".format(
+                s = "((Amount + {half}) >> {shift}) & {mask}".format(
                     half=2 ** (lui_imm.offset - 1),
                     shift=lui_imm.offset,
                     mask=2 ** lui_imm.width - 1,
                 )
             else:
-                vardef = "int64_t Hi = ((Amount >> {shift})) & {mask};".format(
+                s = "((Amount >> {shift})) & {mask}".format(
                     shift=lui_imm.offset,
                     mask=2 ** lui_imm.width - 1,
                 )
+            if hasattr(lui_imm, "signed"):
+                s = "SignExtend64<{width}>({s})".format(
+                    width=lui_imm.width,
+                    s=s,
+                )
+            vardef = "int64_t Hi = {};".format(s)
             vardefs.append(vardef)
             buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{lui_opname}), TempReg)"
             for param in lui_op.params.inputs.values():
@@ -784,9 +790,10 @@ def estimate_add_immediate_codes(isa, li_ops):
             buildmi += ";"
             buildmis.append(buildmi)
             # addi
-            vardef = "int64_t Lo = Amount & {mask};".format(
-                mask=2 ** addi_imm.width - 1,
-            )
+            s = "Amount & {mask}".format(mask=2 ** addi_imm.width - 1)
+            if hasattr(addi_imm, "signed"):
+                s = "SignExtend64<{width}>({s})".format(width=addi_imm.width, s=s)
+            vardef = "int64_t Lo = {};".format(s)
             vardefs.append(vardef)
             buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{addi_opname}), ImmReg)"
             for param in addi_op.params.inputs.values():
@@ -807,6 +814,47 @@ def estimate_add_immediate_codes(isa, li_ops):
 
             cond = "else"
             codes.append((cond, vardefs, buildmis))
+        elif ops in li_s or ops in lui_s:
+            op, imm = ops
+            cond = get_cond(imm)
+            cond = f"if (/*{imm.label}*/ {cond})"
+            if len(codes) > 0:
+                cond = "else " + cond
+            opname = op.opn.upper()
+            # l[u]i : l[u]i t, hi(amount); add dst, src, t
+            vardef = "Register TempReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
+            vardefs.append(vardef)
+            if ops in lui_s:
+                s = "((Amount >> {shift})) & {mask}".format(
+                    shift=imm.offset,
+                    mask=2 ** imm.width - 1,
+                )
+                if hasattr(imm, "signed"):
+                    s = "SignExtend64<{width}>({s})".format(
+                        width=imm.width,
+                        s=s,
+                    )
+                vardef = "int64_t Hi = {};".format(s)
+                vardefs.append(vardef)
+            # l[u]i
+            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), TempReg)"
+            for param in op.params.inputs.values():
+                if isa.is_imm_type(param.type_):
+                    if ops in lui_s:
+                        buildmi += ".addImm(Hi)"
+                    else:
+                        buildmi += ".addImm(Amount)"
+                else:
+                    buildmi += f"/*{param} {param.type_}*/ "
+            buildmi += ";"
+            # add
+            buildmis.append(buildmi)
+            buildmi = "BuildMI(MBB, MBBI, DL, get({Xpu}::ADD), DstReg)"
+            buildmi += ".addReg(SrcReg)"
+            buildmi += ".addReg(TempReg)"
+            buildmi += ";"
+            buildmis.append(buildmi)
+            codes.append((cond, vardefs, buildmis))
         else:
             op, imm = ops
             cond = get_cond(imm)
@@ -814,47 +862,19 @@ def estimate_add_immediate_codes(isa, li_ops):
             if len(codes) > 0:
                 cond = "else " + cond
             opname = op.opn.upper()
-            if ops in li_s or ops in lui_s:
-                # l[u]i : l[u]i t, hi(amount); add dst, src, t
-                vardef = "Register TempReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
-                vardefs.append(vardef)
-                if ops in lui_s:
-                    vardef = "int64_t Hi = ((Amount >> {shift})) & {mask};".format(
-                        shift=imm.offset,
-                        mask=2 ** imm.width - 1,
-                    )
-                    vardefs.append(vardef)
-                # l[u]i
-                buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), TempReg)"
-                for param in op.params.inputs.values():
-                    if isa.is_imm_type(param.type_):
-                        if ops in lui_s:
-                            buildmi += ".addImm(Hi)"
-                        else:
-                            buildmi += ".addImm(Amount)"
-                    else:
-                        buildmi += f"/*{param} {param.type_}*/ "
-                buildmi += ";"
-                # add
-                buildmis.append(buildmi)
-                buildmi = "BuildMI(MBB, MBBI, DL, get({Xpu}::ADD), DstReg)"
-                buildmi += ".addReg(SrcReg)"
-                buildmi += ".addReg(TempReg)"
-                buildmi += ";"
-                buildmis.append(buildmi)
-            else:
-                # addi  : addi dst, src, amount;
-                buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), DstReg)"
-                for param in op.params.inputs.values():
-                    if isa.is_reg_type(param.type_):
-                        buildmi += ".addReg(SrcReg)"
-                    elif isa.is_imm_type(param.type_):
-                        buildmi += ".addImm(Amount)"
-                    else:
-                        buildmi += f"/*{param} {param.type_}*/ "
-                buildmi += ";"
-                buildmis.append(buildmi)
+            # addi  : addi dst, src, amount;
+            buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{opname}), DstReg)"
+            for param in op.params.inputs.values():
+                if isa.is_reg_type(param.type_):
+                    buildmi += ".addReg(SrcReg)"
+                elif isa.is_imm_type(param.type_):
+                    buildmi += ".addImm(Amount)"
+                else:
+                    buildmi += f"/*{param} {param.type_}*/ "
+            buildmi += ";"
+            buildmis.append(buildmi)
             codes.append((cond, vardefs, buildmis))
+            # codes.append((cond, vardefs, buildmis))
     return codes
 
 
@@ -868,7 +888,7 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
         )
         return cond
 
-    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
     codes = list()
     for ops in addi_s + lui_addi_s:
         vardefs = []
@@ -877,14 +897,28 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
             lui_op, lui_imm = ops[0]
             addi_op, addi_imm = ops[1]
             cond = "else"
-            vardef = "int64_t Lo = CVal & {mask};".format(
-                mask=2 ** addi_imm.width - 1,
-            )
+            if hasattr(addi_imm, "signed"):
+                s = "((CVal + {half}) >> {shift}) & {mask}".format(
+                    half=2 ** (lui_imm.offset - 1),
+                    shift=lui_imm.offset,
+                    mask=2 ** lui_imm.width - 1,
+                )
+            else:
+                s = "((CVal >> {shift})) & {mask}".format(
+                    shift=lui_imm.offset,
+                    mask=2 ** lui_imm.width - 1,
+                )
+            if hasattr(lui_imm, "signed"):
+                s = "SignExtend64<{width}>({s})".format(
+                    width=lui_imm.width,
+                    s=s,
+                )
+            vardef = "int64_t Hi = {};".format(s)
             vardefs.append(vardef)
-            vardef = "int64_t Hi = ((CVal >> {shift})) & {mask};".format(
-                shift=lui_imm.offset,
-                mask=2 ** lui_imm.width - 1,
-            )
+            s = "CVal & {mask}".format(mask=2 ** addi_imm.width - 1)
+            if hasattr(addi_imm, "signed"):
+                s = "SignExtend64<{width}>({s})".format(width=addi_imm.width, s=s)
+            vardef = "int64_t Lo = {};".format(s)
             vardefs.append(vardef)
             sdvalue = ("auto Lui = SDValue(CurDAG->getMachineNode({Xpu}::LUI, DL, VT, "
                        "CurDAG->getTargetConstant(Hi, DL, VT)), 0);")
@@ -921,7 +955,7 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
 
 
 def estimate_getaddr_codes(isa, li_ops, phase):
-    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
     codes = list()
     for ops in addi_s + lui_addi_s:
         if phase == 'lla':
@@ -999,6 +1033,7 @@ def estimate_emit_frameindex_codes(isa, li_ops, load_ops, store_ops):
         else:
             s = "  .addImm(MI.getOperand({}).getImm())".format(i + 1)
         load_buildmi.append(s)
+    load_buildmi[-1] += ";"
 
     store_maps = []
     for key, store_op_list in store_ops.items():
@@ -1018,8 +1053,114 @@ def estimate_emit_frameindex_codes(isa, li_ops, load_ops, store_ops):
         else:
             s = "  .addImm(MI.getOperand({}).getImm())".format(i)
         store_buildmi.append(s)
+    store_buildmi[-1] += ";"
 
-    return (load_maps, store_maps, load_buildmi, store_buildmi)
+    # return (load_maps, store_maps, load_buildmi, store_buildmi)
+
+    valname = "NewOffset"
+    def get_cond(imm):
+        cond = "!({val} & {mask}) && ({minv} <= ({val}>>{shift})) && (({val}>>{shift}) <= {maxv})".format(
+            val=valname,
+            mask=int(pow(2, imm.offset) - 1),
+            shift=imm.offset,
+            minv=-int(pow(2, imm.width)),
+            maxv=int(pow(2, imm.width) - 1),
+        )
+        return cond
+
+    # before:
+    #   PseudoFI_ld/st val, fiaddr, fioff
+    # aftter (small offset):
+    #   ld/st val, sp, fioff+spoff
+    # aftter (large offset):
+    #   lui  t0, fioff_hi+spoff_hi
+    #   add  dstaddr, sp, t0
+    #   ld/st val, dstaddr, fioff_lo+spoff_lo
+    (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    load_op = load_ops["load32"][0]
+    load_op, dstname, memobj, bitwidth, aaddrinfo = load_op
+    load_imm = isa.get_param_obj(addrinfo[1], load_op)
+    fi_addi_op, fi_addi_imm = None, None
+    for ops in addi_s:
+        op, imm = ops
+        if imm.width >= load_imm.width and imm.offset <= load_imm.offset:
+            fi_addi_op = op
+            fi_addi_imm = imm
+            break
+    fi_lui_op, fi_lui_imm = None, None
+    for ops in lui_addi_s:
+        addi_op, imm = ops[1]
+        if addi_op == fi_addi_op:
+            fi_lui_op, fi_lui_imm = ops[0]
+            break
+    fi_add_op, _ = add_s[0]
+
+    vardefs = []
+    if hasattr(fi_addi_imm, "signed"):
+        s = "(({val} + {half}) >> {shift}) & {mask}".format(
+            val=valname,
+            half=2 ** (fi_lui_imm.offset - 1),
+            shift=fi_lui_imm.offset,
+            mask=2 ** fi_lui_imm.width - 1,
+        )
+    else:
+        s = "(({val} >> {shift})) & {mask}".format(
+            val=valname,
+            shift=fi_lui_imm.offset,
+            mask=2 ** fi_lui_imm.width - 1,
+        )
+    if hasattr(fi_lui_imm, "signed"):
+        s = "SignExtend64<{width}>({s})".format(
+            width=fi_lui_imm.width,
+            s=s,
+        )
+    vardef = "int64_t NewHi = {};".format(s)
+    vardefs.append(vardef)
+    s = "{val} & {mask}".format(val=valname, mask=2 ** fi_addi_imm.width - 1)
+    if hasattr(fi_addi_imm, "signed"):
+        s = "SignExtend64<{width}>({s})".format(width=fi_addi_imm.width, s=s)
+    vardef = "int64_t NewLo = {};".format(s)
+    vardefs.append(vardef)
+
+    buildmis = []
+    # lui
+    buildmi = "BuildMI(MBB, MBBI, DL, TII->get({{Xpu}}::{lui_opname}), TempReg)".format(
+        lui_opname=fi_lui_op.__name__.upper(),
+    )
+    for param in fi_lui_op.params.inputs.values():
+        if isa.is_imm_type(param.type_):
+            buildmi += ".addImm(NewHi)"
+        else:
+            buildmi += f"/*{param} {param.type_}*/ "
+    buildmi += ";"
+    buildmis.append(buildmi)
+    # add
+    buildmi = "BuildMI(MBB, MBBI, DL, TII->get({{Xpu}}::{add_opname}), TempReg)".format(
+        add_opname=fi_add_op.__name__.upper(),
+    )
+    buildmi += ".addReg(FrameReg)"
+    buildmi += ".addReg(TempReg, RegState::Kill)"
+    buildmi += ";"
+    buildmis.append(buildmi)
+    hiadd_buildmi = buildmis
+
+    buildmis = []
+    # addi
+    buildmi = "BuildMI(MBB, MBBI, DL, TII->get({{Xpu}}::{addi_opname}), MI.getOperand(0).getReg())".format(
+        addi_opname=fi_addi_op.__name__.upper(),
+    )
+    for param in addi_op.params.inputs.values():
+        if isa.is_reg_type(param.type_):
+            buildmi += ".addReg(MI.getOperand(1).getReg())"
+        elif isa.is_imm_type(param.type_):
+            buildmi += ".addImm(MI.getOperand(2).getImm())"
+        else:
+            buildmi += f"/*{param} {param.type_}*/ "
+    buildmi += ";"
+    buildmis.append(buildmi)
+    la_buildmi = buildmis
+
+    return (load_maps, store_maps, vardefs, hiadd_buildmi, la_buildmi, load_buildmi, store_buildmi)
 
 
 class LLVMCompiler():
@@ -1529,15 +1670,18 @@ class LLVMCompiler():
 
         # llvm/lib/Target/Xpu/XpuRegisterInfo.cpp
         _codes = estimate_emit_frameindex_codes(self.isa, li_ops, load_ops, store_ops)
-        load_maps_, store_maps_, load_buildmi_, store_buildmi_ = _codes
+        load_maps, store_maps, vardef, hiadd_buildmi, la_buildmi, load_buildmi, store_buildmi = _codes
         frameindex_load_maps = []
-        for line in load_maps_:
+        for line in load_maps:
             frameindex_load_maps.append(line.format(Xpu=self.namespace))
         frameindex_store_maps = []
-        for line in store_maps_:
+        for line in store_maps:
             frameindex_store_maps.append(line.format(Xpu=self.namespace))
-        frameindex_load_buildmi = load_buildmi_
-        frameindex_store_buildmi = store_buildmi_
+        frameindex_vardef = [x.format(Xpu=self.namespace) for x in vardef]
+        frameindex_hiadd_buildmi = [x.format(Xpu=self.namespace) for x in hiadd_buildmi]
+        frameindex_la_buildmi = [x.format(Xpu=self.namespace) for x in la_buildmi]
+        frameindex_load_buildmi = [x.format(Xpu=self.namespace) for x in load_buildmi]
+        frameindex_store_buildmi = [x.format(Xpu=self.namespace) for x in store_buildmi]
 
         kwargs = {
             "asm_operand_clss": asm_operand_clss,
@@ -1586,6 +1730,9 @@ class LLVMCompiler():
 
             "frameindex_load_maps": frameindex_load_maps,
             "frameindex_store_maps": frameindex_store_maps,
+            "frameindex_vardef": frameindex_vardef,
+            "frameindex_hiadd_buildmi": frameindex_hiadd_buildmi,
+            "frameindex_la_buildmi": frameindex_la_buildmi,
             "frameindex_load_buildmi": frameindex_load_buildmi,
             "frameindex_store_buildmi": frameindex_store_buildmi,
         }
