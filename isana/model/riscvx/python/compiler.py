@@ -7,7 +7,7 @@ fixups = [
 ]
 
 
-class RiscvCompiler(LLVMCompiler):
+class RiscvXCompiler(LLVMCompiler):
     target = "RiscvXpu"
     triple = "riscvxpu32le-unknown-elf"
 
@@ -15,4 +15,4 @@ class RiscvCompiler(LLVMCompiler):
         super().__init__(isa, **kwargs)
 
 
-compiler = RiscvCompiler
+compiler = RiscvXCompiler

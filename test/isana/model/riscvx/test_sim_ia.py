@@ -1,4 +1,4 @@
-from isana.model.riscv.python.isa import isa  # noqa
+from isana.model.riscvx.python.isa import isa  # noqa
 
 
 def test_decode():

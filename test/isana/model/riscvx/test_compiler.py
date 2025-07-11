@@ -1,4 +1,4 @@
-from isana.model.riscv.python.isa import isa
+from isana.model.riscvx.python.isa import isa
 import os
 
 

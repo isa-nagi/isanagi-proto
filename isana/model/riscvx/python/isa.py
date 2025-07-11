@@ -14,7 +14,7 @@ from .instruction import instructions
 from .compiler import compiler
 
 
-class RiscvContext(Context):
+class RiscvXContext(Context):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -29,13 +29,13 @@ class RiscvContext(Context):
             self.PCR.pc = self.PCR.pc + 4
 
 
-class RiscvISA(ISA):
+class RiscvXISA(ISA):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
 
-isa = RiscvISA(
-    name="riscv",
+isa = RiscvXISA(
+    name="RiscvX",
     registers=(
         PCR,
         GPR,
@@ -69,5 +69,5 @@ isa = RiscvISA(
     ),
     instructions=tuple(instructions),
     compiler=compiler,
-    context=RiscvContext,
+    context=RiscvXContext,
 )

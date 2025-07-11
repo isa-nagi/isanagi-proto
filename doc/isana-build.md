@@ -38,7 +38,7 @@ isana-build <subcommand> [options...]
 
 ```
 isana-build sdk \
-  --isa-dir isanagi-proto/isana/model/riscv/python \
+  --isa-dir isanagi-proto/isana/model/riscvx/python \
   --install-prefix ./riscvxpu \
   --llvm-project-dir ./llvm-project \
   --picolibc-dir ./picolibc \
