@@ -1,0 +1,75 @@
+# {{ isa.name }} ISA Specification
+
+## Introduction
+
+text.
+
+## Registers
+
+{% for grp in isa.registers %}
+{#- ```
+:type: long #}
+
+| Index | Name | Aliases | Attributes | Register Number | Dwarf Number |
+|-------|------|---------|------------|-----------------|--------------|
+{%- for reg in grp.regs %}
+| {{ reg.idx }} | {{ reg.label }} | 
+{%- if reg.aliases %} {{ reg.aliases|join(', ') }}{% else %} --{% endif %} |
+{%- if reg.attrs %} {{ reg.attrs|join(', ') }}{% else %} --{% endif %} |
+{#- #} {{ reg.number }} | {{ reg.dwarf_number }} |
+{%- endfor %}
+{#- ``` #}
+{% endfor %}
+
+## Instructions
+
+{% for instr in isa.instructions %}
+### {{ instr.opn }}
+
+#### Parameters
+
+(outs {% for label, tp in instr.prm.outputs.items() -%}
+`{{ label }}:{{ tp }}`{% if not loop.last %}, {% endif %}
+{%- endfor %})
+{#- -#}
+(ins {% for label, tp in instr.prm.inputs.items() -%}
+`{{ label }}:{{ tp }}`{% if not loop.last %}, {% endif %}
+{%- endfor %})
+
+#### Assembly
+
+```
+{% for ast in instr.asm.ast %}
+{%- if ast == '$opn' %}{{ instr.opn }}
+{%- elif ast[0] == '$' %}{{ ast[1:] }}
+{%- else %}{{ ast }}
+{%- endif %}
+{%- endfor %}
+```
+
+#### Bitfields
+
+```wavedrom
+{{ instr.bitfield_wavedrom(instr) }}
+```
+
+#### Semantic
+
+```
+{{ instr.semantic_str(instr) }}
+```
+{% endfor %}
+
+## Instruction Aliases
+
+| Alias | Instructions |
+|-------|--------------|
+{%- for alias in isa.instruction_aliases %}
+| {{ alias.src }} | {{ alias.dst|join('\n') }} |
+{%- endfor %}
+
+## History
+
+* ver.0.1.0
+  * YYYY-MM-DD
+  * publicate first edition.

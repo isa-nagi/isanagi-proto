@@ -528,6 +528,11 @@ class Register():
         self.dwarf_number = kwargs.get('dwarf', number)
         self.value = 0
 
+    @property
+    def attrs(self):
+        attrs = [k[3:] for k in self.__dict__ if k[:3] == 'is_' and self.__dict__[k]]
+        return attrs
+
 
 class Memory():
     def __init__(self, label: str, **kwargs):
@@ -849,6 +854,48 @@ class Instruction():
         self._disasm_str = outstr
         self._disasm_param = outparam
         return outstr
+
+    def semantic_str(self):
+        import ast
+        import inspect
+        import textwrap
+        code = inspect.getsource(self.semantic)
+        code = textwrap.dedent(code)
+        s = ast.unparse(ast.parse(code).body[0].body)
+        s = s.replace('ctx.', '')
+        s = s.replace('ins.', '')
+        # s = textwrap.indent(s, '  ')
+        return s
+
+    def bitfield_wavedrom(self):
+        s = ['{"reg": [']
+        for bits in reversed(self.bin.bitss):
+            if bits.label == '$opc':
+                s += ['{{"bits": {}, "name": "{}", "attr": {}}},'.format(
+                    bits.size(),
+                    "{}[{}]".format(
+                        bits.label[1:],
+                        "{}".format(bits.msb) if bits.msb == bits.lsb else "{}:{}".format(bits.msb, bits.lsb),
+                    ),
+                    (self.opc >> bits.lsb) & (2 ** (bits.msb - bits.lsb + 1) - 1),
+                )]
+            else:
+                s += ['{{"bits": {}, "name": "{}"}},'.format(
+                    bits.size(),
+                    "{}[{}]".format(
+                        bits.label[1:],
+                        "{}".format(bits.msb) if bits.msb == bits.lsb else "{}:{}".format(bits.msb, bits.lsb),
+                    )
+                )]
+        s[-1] = s[-1][:-1]  # remove last comma
+        # s += '], "config": {"hspace": "width"}}'
+        s += ['], "config": {{"bits": {}}} }}'.format(
+            self.bin.bitsize,
+        )]
+        # s += [']}']
+        s = '\n'.join(s)
+        # s = textwrap.indent(s, '  ')
+        return s
 
 
 class unknown_op(Instruction):

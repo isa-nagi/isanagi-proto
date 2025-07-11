@@ -5,6 +5,10 @@ from .sdk import (
     add_subparser_sdk_compiler_rt, build_sdk_compiler_rt,
     add_subparser_sdk_picolibc, build_sdk_picolibc,
 )
+from .doc import (
+    add_subparser_doc, build_doc,
+    add_subparser_doc_isa_spec, build_doc_isa_spec,
+)
 
 
 def main():
@@ -14,6 +18,8 @@ def main():
     add_subparser_sdk_compiler(subparsers)
     add_subparser_sdk_compiler_rt(subparsers)
     add_subparser_sdk_picolibc(subparsers)
+    add_subparser_doc(subparsers)
+    add_subparser_doc_isa_spec(subparsers)
 
     args = argparser.parse_args()
     if args.subcommand == "sdk":
@@ -24,6 +30,10 @@ def main():
         build_sdk_compiler_rt(args)
     elif args.subcommand == "picolibc":
         build_sdk_picolibc(args)
+    elif args.subcommand == "doc":
+        build_doc(args)
+    elif args.subcommand == "isa-spec":
+        build_doc_isa_spec(args)
     else:
         argparser.print_help()
 
