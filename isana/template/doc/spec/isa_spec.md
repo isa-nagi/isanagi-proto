@@ -65,7 +65,7 @@ text.
 | Alias | Instructions |
 |-------|--------------|
 {%- for alias in isa.instruction_aliases %}
-| {{ alias.src }} | {{ alias.dst|join('\n') }} |
+| `{{ alias.src }}` | `{{ alias.dst|join('`<br>`') }}` |
 {%- endfor %}
 
 ## History

@@ -1104,9 +1104,9 @@ class InstructionAlias():
 
 
 class PseudoInstruction():
-    def __init__(self, src, dsts):
+    def __init__(self, src, dst):
         self.src = src
-        self.dsts = dsts
+        self.dst = dst
 
 
 # ----
