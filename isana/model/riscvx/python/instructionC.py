@@ -278,11 +278,11 @@ class c_jr(InstrCRJ):
 
     @property
     def is_jump(self):
-        return self.params.outputs['rdrs1'].number != 1
+        return self.params.inputs['rs1'].number != 1
 
     @property
     def is_return(self):
-        return self.params.outputs['rdrs1'].number == 1
+        return self.params.inputs['rs1'].number == 1
 
 
 class c_mv(InstrCR):
