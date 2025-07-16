@@ -1,3 +1,7 @@
+---
+h1_as_title : true
+---
+
 # {{ isa.name }} ISA Specification
 
 ## Introduction
@@ -7,6 +11,7 @@ text.
 ## Registers
 
 {% for grp in isa.registers %}
+### {{ grp.label }}
 {#- ```
 :type: long #}
 
@@ -36,38 +41,38 @@ Instruction Format Tree:
 {% for instr in isa.instructions %}
 ### {{ instr.opn }}
 
-#### Parameters
+Parameters
+:   (outs {% for label, tp in instr.prm.outputs.items() -%}
+    `{{ label }}:{{ tp }}`{% if not loop.last %}, {% endif %}
+    {%- endfor %})
+    {#- -#}, {# -#}
+    (ins {% for label, tp in instr.prm.inputs.items() -%}
+    `{{ label }}:{{ tp }}`{% if not loop.last %}, {% endif %}
+    {%- endfor %})
 
-(outs {% for label, tp in instr.prm.outputs.items() -%}
-`{{ label }}:{{ tp }}`{% if not loop.last %}, {% endif %}
-{%- endfor %})
-{#- -#}
-(ins {% for label, tp in instr.prm.inputs.items() -%}
-`{{ label }}:{{ tp }}`{% if not loop.last %}, {% endif %}
-{%- endfor %})
+Assembly
+:   ```
+    {% for ast in instr.asm.ast %}
+    {%- if ast == '$opn' %}{{ instr.opn }}
+    {%- elif ast[0] == '$' %}{{ ast[1:] }}
+    {%- else %}{{ ast }}
+    {%- endif %}
+    {%- endfor %}
+    ```
 
-#### Assembly
+Bitfields
+:    ```wavedrom
+     {%- for line in instr.bitfield_wavedrom(instr).splitlines() %}
+     {{ line }}
+     {%- endfor %}
+     ```
 
-```
-{% for ast in instr.asm.ast %}
-{%- if ast == '$opn' %}{{ instr.opn }}
-{%- elif ast[0] == '$' %}{{ ast[1:] }}
-{%- else %}{{ ast }}
-{%- endif %}
-{%- endfor %}
-```
-
-#### Bitfields
-
-```wavedrom
-{{ instr.bitfield_wavedrom(instr) }}
-```
-
-#### Semantic
-
-```
-{{ instr.semantic_str(instr) }}
-```
+Semantic
+:    ```python
+     {%- for line in instr.semantic_str(instr).splitlines() %}
+     {{ line }}
+     {%- endfor %}
+     ```
 {% endfor %}
 
 ## Instruction Aliases
