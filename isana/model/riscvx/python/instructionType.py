@@ -131,11 +131,22 @@ class InstrCRJ(Instr16_10):
     asm = assembly("$opn $rs1")
     bin = binary("$opc[15:12], $rs1[4:0], $opc[6:2], $opc[1:0]")
 
+class InstrCREbreak(Instr16_10):
+    prm = parameter("", "")
+    asm = assembly("$opn")
+    bin = binary("$opc[15:12], $opc[11:7], $opc[6:2], $opc[1:0]")
+
 
 class InstrCI01(Instr16_01):
     prm = parameter("rdrs1:GPR", "imm:ImmS6")
     asm = assembly("$opn $rdrs1, $imm")
     bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:0], $opc[1:0]")
+
+
+class InstrCI01Nop(Instr16_01):
+    prm = parameter("", "")
+    asm = assembly("$opn")
+    bin = binary("$opc[15:13], $opc[12], $opc[11:7], $opc[6:2], $opc[1:0]")
 
 
 class InstrCI10(Instr16_10):

@@ -5,7 +5,8 @@ from .defs import xlen
 # from .memory import Mem
 # from .register import GPR, GPRC, CSR, PCR
 from .instructionType import (
-    InstrCR, InstrCRJ, InstrCI01, InstrCI10, InstrCSS, InstrCIW, InstrCL, InstrCS,
+    InstrCR, InstrCRJ, InstrCREbreak, InstrCI01, InstrCI01Nop, InstrCI10,
+    InstrCSS, InstrCIW, InstrCL, InstrCS,
     InstrCA, InstrCB, InstrCBBranch, InstrCJ, InstrCLB, InstrCSB, InstrCLH,
     InstrCSH, InstrCU, InstrCMMV, InstrCMJT, InstrCMPP,
 )
@@ -93,14 +94,12 @@ class c_sd(InstrCS):
     is_store = True
 
 
-class c_nop(InstrCI01):
+class c_nop(InstrCI01Nop):
     opn, opc = "c.nop", 0b000_0_00000_00000_01
-    bin = binary("$opc[15:13], $imm[5], $opc[11:7], $imm[4:0], $opc[1:0]")
 
 
 class c_addi(InstrCI01):
     opn, opc = "c.addi", 0b000_0_00000_00000_01
-    bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:0], $opc[1:0]")
 
 
 class c_jal(InstrCJ):
@@ -117,12 +116,10 @@ class c_jal(InstrCJ):
 
 class c_addiw(InstrCI01):
     opn, opc = "c.addiw", 0b001_0_00000_00000_01
-    bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:0], $opc[1:0]")
 
 
 class c_li(InstrCI01):
     opn, opc = "c.li", 0b010_0_00000_00000_01
-    bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:0], $opc[1:0]")
 
 
 class c_addi16sp(InstrCI01):
@@ -134,7 +131,6 @@ class c_addi16sp(InstrCI01):
 
 class c_lui(InstrCI01):
     opn, opc = "c.lui", 0b011_0_00000_00000_01
-    bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:0], $opc[1:0]")
 
 
 class c_srli(InstrCB):
@@ -225,7 +221,6 @@ class c_bnez(InstrCBBranch):
 
 class c_slli(InstrCI10):
     opn, opc = "c.slli", 0b000_0_00_000_00000_10
-    bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:0], $opc[1:0]")
 
 
 class c_slli64(InstrCI10):
@@ -287,12 +282,10 @@ class c_jr(InstrCRJ):
 
 class c_mv(InstrCR):
     opn, opc = "c.mv", 0b1000_00000_00000_10
-    bin = binary("$opc[15:12], $rdrs1[4:0], $rs2[4:0], $opc[1:0]")
 
 
-class c_ebreak(InstrCR):
+class c_ebreak(InstrCREbreak):
     opn, opc = "c.ebreak", 0b1001_00000_00000_10
-    bin = binary("$opc[15:0]")
 
 
 class c_jalr(InstrCRJ):
