@@ -322,8 +322,8 @@ class ISA():
                     rest.remove(f)
 
     def _make_decoder(self):
+        depth = 0
         for node, gofoward in self._walk_instruction_tree_by_depth():
-            depth = 0
             depth += 1 if gofoward else - 1
             node.depth = depth
             if node.instr == Instruction:
@@ -379,13 +379,10 @@ class ISA():
                 node.pattern_mask = mask
                 node.pattern_value = value
         # check duplicates
-        # depth = 0
         # for node, gofoward in self._walk_instruction_tree_by_depth():
-        #     depth += 1 if gofoward else - 1
-        #     if gofoward and depth <= 3:
-        #         print('{:4s}{:15s} {:>32s} {:032b} {:032b}'.format(
-        #             '+' * depth,
-        #             node.instr.__name__,
+        #     if gofoward and node.depth < 3:
+        #         print('{:19s} {:>32s} {:032b} {:032b}'.format(
+        #             ('  ' * node.depth) + node.instr.__name__,
         #             node.pattern,
         #             node.pattern_mask,
         #             node.pattern_value,

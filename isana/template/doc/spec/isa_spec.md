@@ -23,6 +23,16 @@ text.
 
 ## Instructions
 
+Instruction Format Tree:
+
+```
+{%- for node, gofoward in isa._walk_instruction_tree_by_depth() -%}
+{%- if gofoward and not node.instr.opn %}
+{{ '{:19s} {:>32s}'.format(('  ' * node.depth) + node.instr.__name__, node.pattern) }}
+{%- endif %}
+{%- endfor %}
+```
+
 {% for instr in isa.instructions %}
 ### {{ instr.opn }}
 
@@ -63,7 +73,7 @@ text.
 ## Instruction Aliases
 
 | Alias | Instructions |
-|-------|--------------|
+|:------|:-------------|
 {%- for alias in isa.instruction_aliases %}
 | `{{ alias.src }}` | `{{ alias.dst|join('`<br>`') }}` |
 {%- endfor %}
