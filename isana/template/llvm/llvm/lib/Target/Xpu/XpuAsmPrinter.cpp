@@ -40,8 +40,8 @@ public:
 
   void emitInstruction(const MachineInstr *MI) override;
 
-  // bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-  //                      const char *ExtraCode, raw_ostream &O) override;
+  bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
+                       const char *ExtraCode, raw_ostream &O) override;
   // bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNum,
   //                            const char *ExtraCode, raw_ostream &O) override;
 
@@ -73,6 +73,57 @@ void {{ Xpu }}AsmPrinter::emitInstruction(const MachineInstr *MI) {
   MCInst OutInst;
   if (!lowerToMCInst(MI, OutInst))
     EmitToStreamer(*OutStreamer, OutInst);
+}
+
+bool {{ Xpu }}AsmPrinter::PrintAsmOperand(
+  const MachineInstr *MI, unsigned OpNo,
+  const char *ExtraCode, raw_ostream &OS
+) {
+  // First try the generic code, which knows about modifiers like 'c' and 'n'.
+  if (!AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, OS))
+    return false;
+
+  const MachineOperand &MO = MI->getOperand(OpNo);
+  if (ExtraCode && ExtraCode[0]) {
+    if (ExtraCode[1] != 0)
+      return true; // Unknown modifier.
+
+    switch (ExtraCode[0]) {
+    default:
+      return true; // Unknown modifier.
+    case 'z':      // Print zero register if zero, regular printing otherwise.
+      if (MO.isImm() && MO.getImm() == 0) {
+        OS << {{ Xpu }}InstPrinter::getRegisterName({{ Xpu }}::{{ REG0 }});
+        return false;
+      }
+      break;
+    case 'i': // Literal 'i' if operand is not a register.
+      if (!MO.isReg())
+        OS << 'i';
+      return false;
+    }
+  }
+
+  switch (MO.getType()) {
+  case MachineOperand::MO_Immediate:
+    OS << MO.getImm();
+    return false;
+  case MachineOperand::MO_Register:
+    OS << {{ Xpu }}InstPrinter::getRegisterName(MO.getReg());
+    return false;
+  case MachineOperand::MO_GlobalAddress:
+    PrintSymbolOperand(MO, OS);
+    return false;
+  case MachineOperand::MO_BlockAddress: {
+    MCSymbol *Sym = GetBlockAddressSymbol(MO.getBlockAddress());
+    Sym->print(OS, MAI);
+    return false;
+  }
+  default:
+    break;
+  }
+
+  return true;
 }
 
 static MCOperand lowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym,
