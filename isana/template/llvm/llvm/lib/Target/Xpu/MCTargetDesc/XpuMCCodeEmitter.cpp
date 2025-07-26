@@ -156,7 +156,7 @@ unsigned
           break;
         {% for fx in fixup_relocs -%}
         {% for instr in fx.instrs -%}
-        case {{ Xpu }}::{{ instr.__class__.__name__.upper() }}:
+        case {{ Xpu }}::{{ instr.__name__.upper() }}:
         {% endfor %}  FixupKind = {{ Xpu }}::{{ fx.name_enum}};
           break;
         {% endfor -%}
@@ -174,7 +174,7 @@ unsigned
         break;
       {% for fx in fixup_relocs -%}
       {% for instr in fx.instrs -%}
-      case {{ Xpu }}::{{ instr.__class__.__name__.upper() }}:
+      case {{ Xpu }}::{{ instr.__name__.upper() }}:
       {% endfor %}  FixupKind = {{ Xpu }}::{{ fx.name_enum}};
         break;
       {% endfor -%}

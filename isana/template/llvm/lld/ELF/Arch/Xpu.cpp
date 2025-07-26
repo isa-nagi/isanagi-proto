@@ -50,6 +50,7 @@ void {{ Xpu }}::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) cons
   }
   {% for fx in fixup_relocs -%}
   case R_{{ XPU }}_{{ fx.name.upper() }}: {
+    val = {{ fx.val_carryed }};
     uint32_t newval = read{{ fx.size }}le(loc)
     {% for proc in fx.reloc_procs -%}
     {{ proc }}

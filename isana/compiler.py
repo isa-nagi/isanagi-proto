@@ -141,6 +141,7 @@ class Fixup(KwargsClass):
         'size',
         'flags',
         'reloc_procs',
+        'val_carryed',
     )
 
     def __init__(self, **kwargs):
@@ -151,16 +152,19 @@ class Fixup(KwargsClass):
         self.bin = kwargs.pop('bin', None)
         self.name_enum = f"fixup_{self.target.lower()}_{self.name}"
         self.reloc_procs = list()
+        self.val_carryed = str()
         super().__init__(**kwargs)
 
 
-def auto_make_fixups(isa):
+def auto_make_fixups(isa, li_ops):
     fixups = list()
-    fixups += auto_make_relocations(isa)
+    fixups += auto_make_relocations(isa, li_ops)
     return fixups
 
 
-def auto_make_relocations(isa):
+def auto_make_relocations(isa, li_ops):
+    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+
     relocs = {
         "pc_abs": list(),
         "pc_rel": list(),
@@ -213,17 +217,32 @@ def auto_make_relocations(isa):
             else:
                 fixup.flags = "0"  # TODO: fix it
             fixup.bin = bin_
-            fixup.instrs = [i() for i in sorted(list(set(instrs[(key, bin_)])), key=lambda x: x.opn)]
+            fixup.instrs = [i for i in sorted(list(set(instrs[(key, bin_)])), key=lambda x: x.opn)]
             fixups.append(fixup)
     instr_reloc_table = dict()
 
     for fixup in fixups:
         procs = list()
         if fixup.bin is None:
-            pass
+            raise Exception("fixup must have bins: {}".format(fixup.name))
         if isinstance(fixup.bin, int):
             procs.append("  | val")
         else:
+            # get symbol imm type
+            val_carryed = "val"
+            if "imm" in fixup.instrs[0].prm.inputs:
+                is_lui = False
+                for instr in fixup.instrs:
+                    if instr in [op[0] for op in lui_s]:
+                        is_lui = True
+                        immobj = isa.get_param_obj("imm", instr)
+                if is_lui and immobj.offset > 0:
+                    val_carryed = "(val + {}) & ~{}".format(
+                        2 ** (immobj.offset - 1),
+                        2 ** immobj.offset - 1,
+                    )
+            fixup.val_carryed = val_carryed
+
             bit_sum = 0
             for bits in reversed(fixup.instrs[0].bin.bitss):
                 if bits.label == "$imm":
@@ -1591,7 +1610,7 @@ class LLVMCompiler():
         if len(self.fixups) > 0:
             fixups = self.fixups[:]
         else:
-            fixups = auto_make_fixups(self.isa)
+            fixups = auto_make_fixups(self.isa, li_ops)
         for fixup in fixups:
             fixup.namespace = self.namespace
             fixup.name_enum = f"fixup_{fixup.namespace.lower()}_{fixup.name}"
