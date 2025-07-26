@@ -484,7 +484,11 @@ def estimate_branch_dag(isa, cmp_ops, br_ops, setcc_ops, zeroreg):
                     setccop, dtp, dnm, ltp, lnm, rtp, rnm = v
                     if rtp != 'UnknownImm':
                         break
-                pat_out = '({brop} ({setccop} {lhstp}:$lhs, {rhstp}:$rhs), {zero}, {bb}:$dst)'.format(
+                if condkey in ('gt', 'ugt', 'le', 'ule'):
+                    pat_out_fmtstr = '({brop} ({setccop} {rhstp}:$rhs, {lhstp}:$lhs), {zero}, {bb}:$dst)'
+                else:
+                    pat_out_fmtstr = '({brop} ({setccop} {lhstp}:$lhs, {rhstp}:$rhs), {zero}, {bb}:$dst)'
+                pat_out = pat_out_fmtstr.format(
                     brop=brop.__name__.upper(),
                     setccop=setccop.__name__.upper(),
                     lhstp=ltp,
