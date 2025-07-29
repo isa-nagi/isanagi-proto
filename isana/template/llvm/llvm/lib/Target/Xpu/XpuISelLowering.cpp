@@ -196,6 +196,11 @@ SDValue
     // MFnInfo->setVarArgsSaveSize(VarArgsSaveSize);
   }
 
+  if (!OutChains.empty()) {
+    OutChains.push_back(Chain);
+    Chain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
+  }
+
   return Chain;
 }
 
