@@ -92,12 +92,21 @@ bool
   if (!Resolved && !WasForced)
     return true;
 
-  // int64_t Offset = int64_t(Value);
+  int64_t Offset = int64_t(Value);
   switch (Fixup.getTargetKind()) {
   default:
     break;
   // case {{ Xpu }}::fixup_xxx:
   //   return is_out_of_range(Value);
+  }
+  const MCInst& Inst = DF->getInst();
+  switch (Inst.getOpcode()) {
+  default:
+    break;
+  {% for key in long_br_codes['infos'] %}
+  case {{ Xpu }}::{{ key }}:
+  {%- endfor %}
+    return {{ long_br_codes['condition'] }};
   }
   return false;
 }
@@ -152,10 +161,14 @@ bool
   switch (Inst.getOpcode()) {
   default:
     return false;
-  {% for r_instr in relax_instrs -%}
+  {%- for r_instr in relax_instrs %}
   // case {{ Xpu }}::{{ r_instr.opc_enum }}:
   //   return true;
-  {% endfor %}
+  {%- endfor %}
+  {%- for key in long_br_codes['infos'] %}
+  case {{ Xpu }}::{{ key }}:
+  {%- endfor %}
+    return true;
   }
 }
 
@@ -189,13 +202,16 @@ bool
   return false;
 }
 
-bool
-{{ Xpu }}AsmBackend::fixupNeedsRelaxation(
-  const MCFixup &Fixup,
-  uint64_t Value
-) const
+static unsigned getRelaxedOpcode(unsigned Opcode)
 {
-  return false;
+  switch (Opcode) {
+  default:
+    return Opcode;
+  {%- for key in long_br_codes['infos'] %}
+  case {{ Xpu }}::{{ key }}:
+    return {{ Xpu }}::PseudoLong{{ key }};
+  {%- endfor %}
+  }
 }
 
 void
@@ -217,6 +233,16 @@ void
   //   Res.addOperand(Inst.getOperand(1));
     break;
   {% endfor -%}
+  case {{ Xpu }}::BEQ:
+  case {{ Xpu }}::BNE:
+  case {{ Xpu }}::BLT:
+  case {{ Xpu }}::BGE:
+  case {{ Xpu }}::BLTU:
+  case {{ Xpu }}::BGEU:
+    {%- for line in long_br_codes['codes1'] %}
+    {{ line }}
+    {%- endfor %}
+    break;
   }
   Inst = std::move(Res);
 }

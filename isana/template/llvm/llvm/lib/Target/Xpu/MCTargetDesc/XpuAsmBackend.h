@@ -27,8 +27,9 @@ public:
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
 
-  bool fixupNeedsRelaxation(const MCFixup &Fixup,
-                            uint64_t Value) const override;
+  // No need to implement if fixupNeedsRelaxationAdvanced is used.
+  // bool fixupNeedsRelaxation(const MCFixup &Fixup,
+  //                           uint64_t Value) const override;
 
   void relaxInstruction(MCInst &Inst,
                         const MCSubtargetInfo &STI) const override;

@@ -66,6 +66,10 @@ public:
   void expandFunctionCall(const MCInst &MI, SmallVectorImpl<char> &CB,
                           SmallVectorImpl<MCFixup> &Fixups,
                           const MCSubtargetInfo &STI) const;
+
+  void expandLongBranch(const MCInst &MI, SmallVectorImpl<char> &CB,
+                        SmallVectorImpl<MCFixup> &Fixups,
+                        const MCSubtargetInfo &STI) const;
 };
 
 } // end anonymous namespace
@@ -119,6 +123,72 @@ void
   {% for line in mc_call_codes %}
   {{ line }}
   {%- endfor %}
+}
+
+static unsigned getInvertedBranchOp(unsigned BrOp) {
+  switch (BrOp) {
+  default:
+    llvm_unreachable("Unexpected branch opcode!");
+  {%- for key, val in long_br_codes['infos'].items() %}
+  case {{ Xpu }}::PseudoLong{{ key }}:
+    return {{ Xpu }}::{{ val['inv'] }};
+  {%- endfor %}
+  }
+}
+
+void
+{{ Xpu }}MCCodeEmitter::expandLongBranch(
+  const MCInst &MI,
+  SmallVectorImpl<char> &CB,
+  SmallVectorImpl<MCFixup> &Fixups,
+  const MCSubtargetInfo &STI
+) const {
+  // branch
+  //   br src1, src2, dstimm2
+  //   dstimm1:
+  //     ...
+  //   dstimm2:
+  //     ...
+  //
+  // long branch
+  //   brInv src1, src2, 8(=dstimm1)
+  //   jal x0, dstimm2
+  //   dstimm1:
+  //     ...
+  //   dstimm2:
+  //     ...
+
+  {%- for line in long_br_codes['codes2'] %}
+  {{ line }}
+  {%- endfor %}
+  unsigned Opcode = MI.getOpcode();
+  // bool IsEqTest =
+  //     Opcode == {{ Xpu }}::PseudoLongBNE || Opcode == {{ Xpu }}::PseudoLongBEQ;
+
+  uint32_t Offset;
+  // if (UseCompressedBr) {
+  // } else
+  {
+    unsigned InvOpc = getInvertedBranchOp(Opcode);
+    MCInst TmpInst =
+        {{ long_br_codes['br_mcinst'] }}
+    uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
+    support::endian::write(CB, Binary, llvm::endianness::little);
+    Offset = 4;
+  }
+
+  // Emit an unconditional jump to the destination.
+  MCInst TmpInst =
+        {{ long_br_codes['jump_mcinst'] }}
+  uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
+  support::endian::write(CB, Binary, llvm::endianness::little);
+
+  Fixups.clear();
+  if (SrcSymbol.isExpr()) {
+    Fixups.push_back(MCFixup::create(Offset, SrcSymbol.getExpr(),
+                                     MCFixupKind({{ long_br_codes['jump_fixup'] }}),
+                                     MI.getLoc()));
+  }
 }
 
 unsigned
@@ -222,6 +292,11 @@ void
     break;
   case {{ Xpu }}::PseudoCALL:
     expandFunctionCall(MI, CB, Fixups, STI);
+    return;
+  {%- for key in long_br_codes['infos'] %}
+  case {{ Xpu }}::PseudoLong{{ key }}:
+  {%- endfor %}
+    expandLongBranch(MI, CB, Fixups, STI);
     return;
   }
 

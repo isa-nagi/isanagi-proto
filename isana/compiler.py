@@ -1015,7 +1015,7 @@ def estimate_opposite_br_codes(isa, br_ops):
         'ueq': 'une', 'une': 'ueq', 'ugt': 'ule', 'ult': 'uge', 'uge': 'ult', 'ule': 'ugt',
     }
     for brkey in table.keys():
-        if not br_ops[brkey] and not br_ops[table[brkey]]:
+        if not br_ops[brkey] or not br_ops[table[brkey]]:
             continue
         brop0 = br_ops[brkey][0][0]
         brop1 = br_ops[table[brkey]][0][0]
@@ -1184,6 +1184,85 @@ def estimate_emit_frameindex_codes(isa, li_ops, load_ops, store_ops):
     la_buildmi = buildmis
 
     return (load_maps, store_maps, vardefs, hiadd_buildmi, la_buildmi, load_buildmi, store_buildmi)
+
+
+def estimate_long_br_codes(isa, br_ops, jump_ops, zeroreg, fixups):
+    table = {
+        'eq': 'ne', 'ne': 'eq', 'gt': 'le', 'lt': 'ge', 'ge': 'lt', 'le': 'gt',
+        'ueq': 'une', 'une': 'ueq', 'ugt': 'ule', 'ult': 'uge', 'uge': 'ult', 'ule': 'ugt',
+    }
+    long_br_infos = {}
+    for brkey in table.keys():
+        if not br_ops[brkey] or not br_ops[table[brkey]]:
+            continue
+        # br ops
+        br_op = br_ops[brkey][0][0]
+        brinv_op = br_ops[table[brkey]][0][0]
+        # opposite br ops
+        name = br_op.__name__.upper()
+        long_br_infos.setdefault(name, {})
+        long_br_infos[name]['op'] = br_op
+        long_br_infos[name]['inv'] = brinv_op.__name__.upper()
+    # condition code
+    beq_ops = br_ops['eq']
+    brop, ltp, lnm, rtp, rnm = beq_ops[0]
+    brimm_prm = list(brop.params.inputs.values())[-1]
+    brimm = isa.get_param_obj(brimm_prm.label, brop)
+    long_br_condition = "!isInt<{}>(Offset)".format(brimm.width + brimm.offset)
+    # inst code
+    codes1 = []
+    codes1.append("Res.setOpcode(getRelaxedOpcode(Inst.getOpcode()));")
+    for i, operand in enumerate(brop.params.inputs):
+        codes1.append(f"Res.addOperand(Inst.getOperand({i}));")
+    # inst code 2
+    jump_op, operands = jump_ops["jump"][0]
+    codes2 = []
+    br_mcinst = []
+    br_mcinst.append("MCInstBuilder(InvOpc)")
+    for i, prm in enumerate(brop.params.inputs.values()):
+        if isa.is_reg_type(prm.type_):
+            codes2.append(f"MCRegister SrcReg{i + 1} = MI.getOperand({i}).getReg();")
+            br_mcinst.append(f".addReg(SrcReg{i + 1})")
+        else:
+            codes2.append(f"MCOperand SrcSymbol = MI.getOperand({i});")
+            br_mcinst.append(".addImm({})".format(brop.bin.bytesize + jump_op.bin.bytesize))
+    br_mcinst.append(";")
+    # codes1 = ''.join(codes2)
+    # codes2 = ''.join(codes2)
+    br_mcinst = ''.join(br_mcinst)
+    # jump code, jump fixup
+    jump_mcinst = []
+    jump_mcinst.append("MCInstBuilder({{Xpu}}::{})".format(jump_op.__name__.upper()))
+    for prm in list(jump_op.params.outputs.values()) + list(jump_op.params.inputs.values()):
+        if isa.is_reg_type(prm.type_):
+            jump_mcinst.append(f".addReg({{Xpu}}::{zeroreg})")
+        else:
+            jump_mcinst.append(".addOperand(SrcSymbol)")
+    jump_mcinst.append(";")
+    jump_mcinst = ''.join(jump_mcinst)
+    jump_fixup = None
+    for fixup in fixups:
+        if hasattr(fixup, 'instrs') and jump_op in fixup.instrs:
+            jump_fixup = "{Xpu}::fixup_{xpu}_" + fixup.name
+    # br dag
+    br_dags = []
+    for prm in brop.params.inputs.values():
+        if isa.is_reg_type(prm.type_):
+            br_dags.append("{}:${}".format(prm.type_, prm.label))
+        else:
+            br_dags.append("Br{}:${}".format(prm.type_, prm.label))
+    br_dag = ', '.join(br_dags)
+    codes = {
+        'infos': long_br_infos,
+        'condition': long_br_condition,
+        'codes1': codes1,
+        'codes2': codes2,
+        'br_mcinst': br_mcinst,
+        'jump_mcinst': jump_mcinst,
+        'jump_fixup': jump_fixup,
+        'br_dag': br_dag,
+    }
+    return codes
 
 
 class LLVMCompiler():
@@ -1706,6 +1785,14 @@ class LLVMCompiler():
         frameindex_load_buildmi = [x.format(Xpu=self.namespace) for x in load_buildmi]
         frameindex_store_buildmi = [x.format(Xpu=self.namespace) for x in store_buildmi]
 
+        # long branch codes
+        codes = estimate_long_br_codes(self.isa, br_ops, jump_ops, reg0, fixups)
+        codes['jump_mcinst'] = codes['jump_mcinst'].format(Xpu=self.namespace)
+        codes['jump_fixup'] = codes['jump_fixup'].format(
+            Xpu=self.namespace, xpu=self.namespace.lower()
+        )
+        long_br_codes = codes
+
         kwargs = {
             "asm_operand_clss": asm_operand_clss,
             "operand_clss": operand_clss,
@@ -1758,6 +1845,8 @@ class LLVMCompiler():
             "frameindex_la_buildmi": frameindex_la_buildmi,
             "frameindex_load_buildmi": frameindex_load_buildmi,
             "frameindex_store_buildmi": frameindex_store_buildmi,
+
+            "long_br_codes": long_br_codes,
         }
         return kwargs
 

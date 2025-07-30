@@ -156,6 +156,27 @@ def PseudoBR: {{ Xpu }}Inst<
 {{ dag }}
 {%- endfor %}
 
+class LongBccPseudo : {{ Xpu }}Inst<
+  (outs), (ins {{ long_br_codes['br_dag'] }}),
+  "",
+  []>
+{
+  let isPseudo = 1;
+  let isCodeGenOnly = 1;
+  let isBarrier = 1;
+  let isBranch = 1;
+  let hasSideEffects = 0;
+  let mayStore = 0;
+  let mayLoad = 0;
+  let isAsmParserOnly = 1;
+  let hasNoSchedulingInfo = 1;
+  let Size = 8;
+}
+
+{%- for key in long_br_codes['infos'] %}
+def PseudoLong{{ key }} : LongBccPseudo;
+{%- endfor %}
+
 def PseudoBRIND: {{ Xpu }}Inst<
   (outs), (ins GPR:$rs1, ImmS12:$imm),
   "",
