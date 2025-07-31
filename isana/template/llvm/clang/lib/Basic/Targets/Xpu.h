@@ -90,6 +90,7 @@ class LLVM_LIBRARY_VISIBILITY {{ Xpu }}32leTargetInfo : public {{ Xpu }}TargetIn
 public:
   {{ Xpu }}32leTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
       : {{ Xpu }}TargetInfo(Triple, Opts) {
+    BigEndian = false;
     IntPtrType = SignedInt;
     PtrDiffType = SignedInt;
     SizeType = UnsignedInt;
@@ -101,6 +102,7 @@ class LLVM_LIBRARY_VISIBILITY {{ Xpu }}32beTargetInfo : public {{ Xpu }}TargetIn
 public:
   {{ Xpu }}32beTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
       : {{ Xpu }}TargetInfo(Triple, Opts) {
+    BigEndian = true;
     IntPtrType = SignedInt;
     PtrDiffType = SignedInt;
     SizeType = UnsignedInt;
@@ -112,6 +114,7 @@ class LLVM_LIBRARY_VISIBILITY {{ Xpu }}64leTargetInfo : public {{ Xpu }}TargetIn
 public:
   {{ Xpu }}64leTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
       : {{ Xpu }}TargetInfo(Triple, Opts) {
+    BigEndian = false;
     IntPtrType = SignedInt;
     PtrDiffType = SignedInt;
     SizeType = UnsignedInt;
@@ -123,6 +126,7 @@ class LLVM_LIBRARY_VISIBILITY {{ Xpu }}64beTargetInfo : public {{ Xpu }}TargetIn
 public:
   {{ Xpu }}64beTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
       : {{ Xpu }}TargetInfo(Triple, Opts) {
+    BigEndian = true;
     IntPtrType = SignedInt;
     PtrDiffType = SignedInt;
     SizeType = UnsignedInt;

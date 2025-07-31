@@ -36,9 +36,16 @@ void {{ Xpu }}TargetInfo::getTargetDefines(const LangOptions &Opts,
                                              MacroBuilder &Builder) const {
   Builder.defineMacro("__{{ xpu }}__");
   Builder.defineMacro("__{{ xpu }}32__");
-  Builder.defineMacro("__{{ xpu }}32le__");
-  if (Opts.GNUMode)
-    Builder.defineMacro("{{ xpu }}32le");
+
+  if (isLittleEndian()) {
+    Builder.defineMacro("__{{ xpu }}32le__");
+    if (Opts.GNUMode)
+      Builder.defineMacro("{{ xpu }}32le");
+  } else {
+    Builder.defineMacro("__{{ xpu }}32be__");
+    if (Opts.GNUMode)
+      Builder.defineMacro("{{ xpu }}32be");
+  }
 }
 
 bool {{ Xpu }}TargetInfo::hasFeature(StringRef Feature) const {

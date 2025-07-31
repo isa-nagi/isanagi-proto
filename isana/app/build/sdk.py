@@ -268,7 +268,8 @@ def build_sdk_picolibc(args, isa=None):
     expand_picolibc_template(args, isa)
 
     llvm_install_prefix = os.path.join(os.path.abspath(args.install_prefix), "sdk")
-    picolibc_install_prefix = os.path.join(llvm_install_prefix, "picolibc")
+    runtime_dir = os.path.join("lib", "clang-runtimes", isa.compiler.triple)
+    picolibc_install_prefix = os.path.join(llvm_install_prefix, runtime_dir)
     cross_file = os.path.join(args.picolibc_dir, "scripts",
                               "cross-clang-{}.txt".format(isa.compiler.target.lower()))
     work_dir = os.path.join(args.work_dir, "build-picolibc")
