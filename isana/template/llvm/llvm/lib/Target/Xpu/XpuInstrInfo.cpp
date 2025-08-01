@@ -59,6 +59,9 @@ void
   MachineFunction *MF = MBB.getParent();
   MachineRegisterInfo &MRI = MF->getRegInfo();
 
+  if (Amount == 0) {
+    return;
+  }
   {% for cond, vardefs, buildmis in addimm_codes -%}
   {{ cond }} {
   {%- for vardef in vardefs %}
