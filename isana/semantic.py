@@ -1,5 +1,6 @@
 import ast
 import inspect
+import re
 import sys
 from textwrap import dedent
 
@@ -280,6 +281,27 @@ def may_change_pc_relative(instr):
     return None
 
 
+def may_use_pc_relative(instr):
+    def pcrel1_semantic(self, ctx, ins):
+        PickAny = PickAny + PickAny  # noqa
+
+    semantic = instr.semantic
+    if m := _search_ast(semantic, pcrel1_semantic):
+        try:
+            # regn0 = m.picks[0].slice.attr
+            # grpn0 = m.picks[0].value.attr
+            # print(regn0, grpn0, instr.isa._ctx.GPR)
+            # is_pc0 = eval(f'instr.isa._ctx.{grpn0}.get_obj("{regn0}").is_pc')
+            regn1 = m.picks[1].attr
+            grpn1 = m.picks[1].value.attr
+            is_pc1 = eval(f'instr.isa._ctx.{grpn1}.get_obj("{regn1}").is_pc')
+        except Exception:
+            is_pc1 = False
+        if is_pc1:
+            return ast.unparse(m.picks[2])
+    return None
+
+
 def may_take_memory_address(semantic):
     code = inspect.getsource(semantic)
     code = dedent(code)
@@ -372,6 +394,44 @@ def estimate_call_ops(isa):
                 instrs.append((instr, False))  # call
             elif type(instr.is_indirect) is bool and instr.is_indirect:
                 instrs.append((instr, True))  # callind
+    longcall_s = []
+    for alias in isa.instruction_aliases:
+        if hasattr(alias, "is_call") and alias.is_call:
+            asms = alias.dst
+            opns = [re.split(r"\s*,?\s+", asm)[0] for asm in asms]
+            # instrs_ = [next(filter(lambda x: x.opn == opn, isa.instructions), None) for opn in opns]
+            instrs_ = []
+            for opn in opns:
+                instr = next(filter(lambda x: x.opn == opn, isa.instructions), None)
+                is_indirect = False
+                instrs_.append((instr, is_indirect))
+            longcall_info = []
+            for instr, is_indirect in instrs_:
+                operands = []
+                for asm in instr.asm.ast:
+                    if asm[0] == '$' and asm != '$opn':
+                        label = asm[1:]
+                        prmobj = isa.get_param_obj(label, instr)
+                        if label in instr.params.outputs:
+                            if isa.is_reg_type(instr.params.outputs[label].type_):
+                                operands.append((prmobj, ra))
+                        elif label in instr.params.inputs:
+                            if is_indirect:
+                                if isa.is_reg_type(instr.params.inputs[label].type_):
+                                    operands.append((prmobj, label))
+                                else:
+                                    operands.append((prmobj, 0))
+                            else:
+                                if isa.is_reg_type(instr.params.inputs[label].type_):
+                                    # operands.append((prmobj, zero))
+                                    operands.append((prmobj, ra))
+                                else:
+                                    operands.append((prmobj, label))
+                longcall_info.append((instr, operands))
+            if len(instrs_) > 1:
+                longcall_s.append(longcall_info)
+            else:
+                pass
     for instr in isa.instructions:
         if m := may_change_pc_absolute(instr):
             tgtast = ast.parse(m)
@@ -400,7 +460,7 @@ def estimate_call_ops(isa):
                 return prmobj.width
         return sys.maxsize
     instrs.sort(key=imm_width, reverse=True)
-    call_ops = {"call": [], "callind": []}
+    call_ops = {"call": [], "callind": [], "longcall": []}
     for instr, is_indirect in instrs:
         operands = []
         for asm in instr.asm.ast:
@@ -423,6 +483,7 @@ def estimate_call_ops(isa):
                             operands.append((prmobj, label))
         key = "callind" if is_indirect else "call"
         call_ops[key].append((instr, operands))
+    call_ops["longcall"] = longcall_s
     return call_ops
 
 
@@ -614,6 +675,15 @@ def estimate_load_immediate_ops(isa):
                     li32_s.append(((lui, lui_imm), (addi, addi_imm)))
     li_ops = (li32_s, tuple(li_s), tuple(lui_s), tuple(addi_s), tuple(lui_addi_s), tuple(add_s))
     return li_ops
+
+
+def is_lui_like(instr, lui_s):
+    imm_types = []
+    for key, value in instr.prm.inputs.items():
+        if instr.isa.is_imm_type(value):
+            imm_types.append(value)
+    lui_imm_types = [info[1].label for info in lui_s]
+    return imm_types == lui_imm_types
 
 
 def may_compare(semantic):

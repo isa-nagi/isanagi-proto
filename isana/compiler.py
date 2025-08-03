@@ -5,12 +5,14 @@ from jinja2 import Template
 from isana.semantic import (
     may_change_pc_absolute,
     may_change_pc_relative,
+    may_use_pc_relative,
     may_take_memory_address,
     get_alu_dag,
     estimate_jump_ops,
     estimate_call_ops,
     estimate_ret_ops,
     estimate_load_immediate_ops,
+    is_lui_like,
     estimate_compare_branch_ops,
     estimate_branch_ops,
     estimate_setcc_ops,
@@ -142,6 +144,7 @@ class Fixup(KwargsClass):
         'flags',
         'reloc_procs',
         'val_carryed',
+        'is_pcrel',
     )
 
     def __init__(self, **kwargs):
@@ -153,21 +156,23 @@ class Fixup(KwargsClass):
         self.name_enum = f"fixup_{self.target.lower()}_{self.name}"
         self.reloc_procs = list()
         self.val_carryed = str()
+        self.is_pcrel = False
         super().__init__(**kwargs)
 
 
-def auto_make_fixups(isa, li_ops):
+def auto_make_fixups(isa, li_ops, call_ops):
     fixups = list()
-    fixups += auto_make_relocations(isa, li_ops)
+    fixups += auto_make_relocations(isa, li_ops, call_ops)
     return fixups
 
 
-def auto_make_relocations(isa, li_ops):
+def auto_make_relocations(isa, li_ops, call_ops):
     (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
 
     relocs = {
         "pc_abs": list(),
         "pc_rel": list(),
+        "pc_use": list(),
         "mem_addr": list(),
         "other_imm": list(),
     }
@@ -187,6 +192,11 @@ def auto_make_relocations(isa, li_ops):
             relocs[key].append(relocinfo)
             instrs.setdefault((key, bin_filtered), list())
             instrs[(key, bin_filtered)].append(instr)
+        elif may_use_pc_relative(instr):
+            key = "pc_use"
+            relocs[key].append(relocinfo)
+            instrs.setdefault((key, bin_filtered), list())
+            instrs[(key, bin_filtered)].append(instr)
         elif may_take_memory_address(instr.semantic):
             key = "mem_addr"
             relocs[key].append(relocinfo)
@@ -203,6 +213,7 @@ def auto_make_relocations(isa, li_ops):
     fixups += [
         Fixup(name="32", offset=0, size=32, flags=0, bin=32),
         Fixup(name="64", offset=0, size=64, flags=0, bin=64),
+        Fixup(name="call", offset=0, size=64, flags=0, bin=64),
     ]
     for key in relocs:
         relocs[key] = sorted(list(set(relocs[key])), key=lambda x: str(x[1]))
@@ -212,20 +223,29 @@ def auto_make_relocations(isa, li_ops):
             fixup.name = f"{key}_{ri}"
             fixup.offset = 0
             fixup.size = bitsize  # TODO: fix it
-            if key == "pc_rel":
+            if key in ("pc_rel", "pc_use"):
                 fixup.flags = "MCFixupKindInfo::FKF_IsPCRel"
+                fixup.is_pcrel = True
             else:
                 fixup.flags = "0"  # TODO: fix it
             fixup.bin = bin_
             fixup.instrs = [i for i in sorted(list(set(instrs[(key, bin_)])), key=lambda x: x.opn)]
             fixups.append(fixup)
-    instr_reloc_table = dict()
 
+    instr_reloc_table = dict()
+    for fixup in fixups:
+        if hasattr(fixup, "instrs"):
+            for instr in fixup.instrs:
+                instr_reloc_table[instr] = fixup
+
+    lui_op, lui_imm = lui_s[0]
     for fixup in fixups:
         procs = list()
         if fixup.bin is None:
             raise Exception("fixup must have bins: {}".format(fixup.name))
-        if isinstance(fixup.bin, int):
+        if fixup.name == "call":
+            pass
+        elif isinstance(fixup.bin, int):
             procs.append("  | val")
         else:
             # get symbol imm type
@@ -237,7 +257,7 @@ def auto_make_relocations(isa, li_ops):
                         is_lui = True
                         immobj = isa.get_param_obj("imm", instr)
                 if is_lui and immobj.offset > 0:
-                    val_carryed = "(val + {}) & ~{}".format(
+                    val_carryed = "((val + {}) & ~{})".format(
                         2 ** (immobj.offset - 1),
                         2 ** immobj.offset - 1,
                     )
@@ -253,8 +273,53 @@ def auto_make_relocations(isa, li_ops):
                     ))
                 bit_sum += bits.size()
         fixup.reloc_procs = procs
-        if fixup in instr_reloc_table.keys():
-            fixup.instrs = instr_reloc_table[fixup]
+    for fixup in fixups:
+        if fixup.name == "call":
+            procs = list()
+            if call_ops["longcall"]:
+                ops = call_ops["longcall"][0]
+                pos_sum = 0
+                fixup.instrs = [op for op, oprands in ops]
+                for op_info in ops:
+                    op, operands = op_info
+                    val_carryed = "val"
+                    if is_lui_like(op, lui_s):
+                        if may_use_pc_relative(op):
+                            fixup.flags = "MCFixupKindInfo::FKF_IsPCRel"
+                            fixup.is_pcrel = True
+                        immobj = isa.get_param_obj("imm", op)
+                        val_carryed = "((val + {}) & ~{})".format(
+                            2 ** (immobj.offset - 1),
+                            2 ** immobj.offset - 1,
+                        )
+                    bit_sum = 0
+                    procs.append("| ((0 // {}".format(op.opn))
+                    for bits in reversed(op.bin.bitss):
+                        if bits.label == "$imm":
+                            procs.append("  | ((({val} >> {}) & {}) << {})".format(
+                                bits.lsb,
+                                2 ** bits.size() - 1,
+                                bit_sum,
+                                val=val_carryed,
+                            ))
+                        bit_sum += bits.size()
+                    procs.append(") << {})".format(pos_sum))
+                    pos_sum += op.bin.bitsize
+            else:
+                op, operands = call_ops["call"][0]
+                fixup.instrs = [op]
+                bit_sum = 0
+                procs.append("  | val")
+                for bits in reversed(op.bin.bitss):
+                    if bits.label == "$imm":
+                        procs.append("  | (((val >> {}) & {}) << {})".format(
+                            bits.lsb,
+                            2 ** bits.size() - 1,
+                            bit_sum,
+                        ))
+                    bit_sum += bits.size()
+            fixup.size = sum([instr.bin.bitsize for instr in fixup.instrs])
+            fixup.reloc_procs = procs
     return fixups
 
 
@@ -690,6 +755,23 @@ def estimate_pseudo_call_dag(isa, call_ops):
     return s
 
 
+def estimate_pseudo_call_asm(isa, call_ops):
+    call_op = call_ops["call"][0]
+    call_op, operands = call_op
+    s = call_op.__name__
+    s_ops = []
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):  # maybe 'imm'
+            s_ops += ["$func"]
+        elif isinstance(value, int):
+            s_ops += [str(value)]
+        else:
+            s_ops += [value.label]
+    s = s + " " + ', '.join(s_ops)
+    return s
+
+
 def estimate_pseudo_callind_dag(isa, call_ops):
     call_op = call_ops["callind"][0]
     call_op, operands = call_op
@@ -736,6 +818,36 @@ def estimate_copy_reg_buildmi(isa, mv_ops, addi_ops, add_ops, zeroreg):
                 buildmi += f"/*{param} {param.type_}*/ "
         buildmi += ";"
         return buildmi
+
+
+def estimate_mc_expand_longcall_codes(isa, call_ops):
+    sss = []
+    if call_ops["longcall"]:
+        for i, op_info in enumerate(call_ops["longcall"][0]):
+            op, operands = op_info
+            s = "TmpInst = MCInstBuilder({{Xpu}}::{opname})".format(
+                opname=op.__name__.upper(),
+            )
+            for op in operands:
+                prmobj, value = op
+                if isinstance(value, str):  # maybe 'imm'
+                    if i == 0:
+                        s += ".addExpr(CallExpr)"
+                    else:
+                        s += ".addImm(0)"
+                elif isinstance(value, int):
+                    s += ".addImm({})".format(value)
+                else:
+                    s += ".addReg({{Xpu}}::{})".format(value.label.upper())
+            s += ";"
+
+            ss = [
+                s,
+                "Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);",
+                "support::endian::write(CB, Binary, llvm::endianness::little);",
+            ]
+            sss += ss
+    return sss
 
 
 def estimate_mc_expand_call_codes(isa, call_ops):
@@ -1678,6 +1790,7 @@ class LLVMCompiler():
         pseudo_ret_dag = estimate_pseudo_ret_dag(self.isa, ret_ops)
         pseudo_call_dag = estimate_pseudo_call_dag(self.isa, call_ops)
         pseudo_callind_dag = estimate_pseudo_callind_dag(self.isa, call_ops)
+        pseudo_call_asm = estimate_pseudo_call_asm(self.isa, call_ops)
 
         # llvm/lib/Target/Xpu/AsmParser/
         asm_operand_clss = []
@@ -1693,7 +1806,7 @@ class LLVMCompiler():
         if len(self.fixups) > 0:
             fixups = self.fixups[:]
         else:
-            fixups = auto_make_fixups(self.isa, li_ops)
+            fixups = auto_make_fixups(self.isa, li_ops, call_ops)
         for fixup in fixups:
             fixup.namespace = self.namespace
             fixup.name_enum = f"fixup_{fixup.namespace.lower()}_{fixup.name}"
@@ -1704,7 +1817,9 @@ class LLVMCompiler():
         fixups_adjust = fixups[:]
         relax_instrs = list()
         fixups_pc_rel = [fx for fx in fixups if fx.name[:6] == "pc_rel"]
+        fixups_pc_use = [fx for fx in fixups if fx.name[:6] == "pc_use"]
         fixup_relocs = [fx for fx in fixups if not isinstance(fx.bin, int)]
+        fixup_call = next(filter(lambda fx: fx.name == "call", fixups), None)
 
         instr_aliases = []
         for alias in self.isa.instruction_aliases:
@@ -1716,6 +1831,12 @@ class LLVMCompiler():
                 instr_aliases.append(instr_alias)
 
         # llvm/lib/Target/Xpu/MCTargetDesc/XpuMCCodeEmitter.cpp
+        _codes = estimate_mc_expand_longcall_codes(self.isa, call_ops)
+        mc_longcall_codes = []
+        for line in _codes:
+            line = line.format(Xpu=self.namespace)
+            mc_longcall_codes.append(line)
+
         _codes = estimate_mc_expand_call_codes(self.isa, call_ops)
         mc_call_codes = []
         for line in _codes:
@@ -1811,6 +1932,7 @@ class LLVMCompiler():
             "pseudo_ret_dag": pseudo_ret_dag,
             "pseudo_call_dag": pseudo_call_dag,
             "pseudo_callind_dag": pseudo_callind_dag,
+            "pseudo_call_asm": pseudo_call_asm,
 
             "instr_bitsizes": instr_bitsizes,
 
@@ -1822,10 +1944,13 @@ class LLVMCompiler():
             "relax_instrs": relax_instrs,
 
             "fixups_pc_rel": fixups_pc_rel,
+            "fixups_pc_use": fixups_pc_use,
             "fixup_relocs": fixup_relocs,
+            "fixup_call": fixup_call,
 
             "instr_aliases": instr_aliases,
 
+            "mc_longcall_codes": mc_longcall_codes,
             "mc_call_codes": mc_call_codes,
 
             "addimm_codes": addimm_codes,

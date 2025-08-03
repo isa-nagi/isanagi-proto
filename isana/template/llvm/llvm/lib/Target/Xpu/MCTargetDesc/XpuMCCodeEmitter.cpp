@@ -104,25 +104,24 @@ void
 
   const MCExpr *CallExpr = Func.getExpr();
 
-#if 0
-  // long jump
-  //  auipc x1, $func | auipc x1, 0
-  //                  |   + fixup:pc_rel
-  //  jalr x1, x1, 0  | jalr x1, x1, 0
-  TmpInst = MCInstBuilder({{ Xpu }}::AUIPC).addReg(Ra).addExpr(CallExpr);
-  Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
-  support::endian::write(CB, Binary, llvm::endianness::little);
-
-  TmpInst = MCInstBuilder({{ Xpu }}::JALR).addReg(Ra).addReg(Ra).addImm(0);
-  Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
-  support::endian::write(CB, Binary, llvm::endianness::little);
-#endif
-  // short jump
-  // jal x1, $func    | jal x1, 0
-  //                  |   + fixup:pc_rel
-  {% for line in mc_call_codes %}
-  {{ line }}
-  {%- endfor %}
+  if ({% if mc_longcall_codes %}1{% else %}0{% endif %}) {
+    // long jump
+    //           | --RISC-V spec--
+    // call func | auipc x1, <expr:sym=func>
+    //           |   + fixup:call
+    //           | jalr x1, x1, 0
+    {%- for line in mc_longcall_codes %}
+    {{ line }}
+    {%- endfor %}
+  } else {
+    // short jump
+    //           | --RISC-V spec--
+    // call func | jal x1, <expr:sym=func>
+    //           |   + fixup:call
+    {%- for line in mc_call_codes %}
+    {{ line }}
+    {%- endfor %}
+  }
 }
 
 static unsigned getInvertedBranchOp(unsigned BrOp) {
@@ -217,7 +216,8 @@ unsigned
     case {{ Xpu }}MCExpr::VK_{{ Xpu }}_Invalid:
       llvm_unreachable("Unhandled fixup kind!");
     case {{ Xpu }}MCExpr::VK_{{ Xpu }}_CALL:
-          FixupKind = {{ Xpu }}::fixup_{{ xpu }}_pc_rel_1;  // TODO fix it
+      FixupKind = {{ Xpu }}::fixup_{{ xpu }}_call;
+      break;
     case {{ Xpu }}MCExpr::VK_{{ Xpu }}_SYMBOL:
       {
         unsigned Opcode = MI.getOpcode();

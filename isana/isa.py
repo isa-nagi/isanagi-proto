@@ -1101,9 +1101,11 @@ class InstructionAlias():
 
 
 class PseudoInstruction():
-    def __init__(self, src, dst):
+    def __init__(self, src, dst, **kwargs):
         self.src = src
         self.dst = dst
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
 
 # ----

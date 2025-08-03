@@ -70,7 +70,8 @@ instruction_aliases = [
     InstructionAlias("jalr $rs", ["jalr x1, $rs, 0"]),
     InstructionAlias("ret", ["jalr x0, x1, 0"]),
     PseudoInstruction("call $symbol", ["auipc x1, %pcrel_hi($symbol)",
-                                       "jalr x1, %pcrel_lo($symbol) (x1)"]),
+                                       "jalr x1, %pcrel_lo($symbol) (x1)"],
+                      is_call=True),
     PseudoInstruction("tail $symbol", ["auipc x6, %pcrel_hi($symbol)",
                                        "jalr x0, %pcrel_lo($symbol) (x6)"]),
 

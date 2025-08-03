@@ -48,7 +48,9 @@ unsigned
       return ELF::R_CKCORE_NONE;
     case FK_PCRel_4:
       return ELF::R_CKCORE_PCREL32;
-    {% for fx in fixups_pc_rel -%}
+    case {{ Xpu }}::{{ fixup_call.name_enum }}:
+      return ELF::R_{{ XPU }}_CALL;
+    {% for fx in fixups_pc_rel + fixups_pc_use -%}
     case {{ Xpu }}::{{ fx.name_enum }}:
       return ELF::R_{{ XPU }}_{{ fx.name.upper() }};
     {% endfor %}
@@ -89,6 +91,8 @@ unsigned
     return ELF::R_{{ XPU }}_32;
   case FK_Data_8:
     return ELF::R_{{ XPU }}_64;
+  case {{ Xpu }}::{{ fixup_call.name_enum }}:
+    return ELF::R_{{ XPU }}_CALL;
   {% for fx in fixup_relocs -%}
   case {{ Xpu }}::{{ fx.name_enum }}:
     return ELF::R_{{ XPU }}_{{ fx.name.upper() }};

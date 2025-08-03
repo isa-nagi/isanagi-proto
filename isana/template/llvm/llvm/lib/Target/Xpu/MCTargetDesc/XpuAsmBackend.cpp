@@ -68,13 +68,13 @@ adjustFixupValue(
   {% endfor %}
   {% for fx in fixups_adjust -%}
   case {{ Xpu }}::{{ fx.name_enum }}: {
+    {% if fx.reloc_procs -%}
     const uint64_t val = Value;  // TODO: remove unused variable
+    {% endif -%}
     return 0
-    {% for proc in fx.reloc_procs -%}
+    {%- for proc in fx.reloc_procs %}
     {{ proc }}
-    {% endfor -%}
-    ;
-    break;
+    {%- endfor %};
   }
   {% endfor %}
   }
@@ -137,19 +137,10 @@ void
   assert(Offset + NumBytes <= Data.size() && "Invalid fixup offset!");
 
   bool IsLittleEndian = (Endian == llvm::endianness::little);
-  // bool IsInstFixup = (Kind >= FirstTargetFixupKind);
-  // 
-  // if (IsLittleEndian && IsInstFixup && (NumBytes == 4)) {
-  //   Data[Offset + 0] |= uint8_t((Value >> 16) & 0xff);
-  //   Data[Offset + 1] |= uint8_t((Value >> 24) & 0xff);
-  //   Data[Offset + 2] |= uint8_t(Value & 0xff);
-  //   Data[Offset + 3] |= uint8_t((Value >> 8) & 0xff);
-  // } else {
-    for (unsigned I = 0; I != NumBytes; I++) {
-      unsigned Idx = IsLittleEndian ? I : (NumBytes - 1 - I);
-      Data[Offset + Idx] |= uint8_t((Value >> (I * 8)) & 0xff);
-    }
-  // }
+  for (unsigned I = 0; I != NumBytes; I++) {
+    unsigned Idx = IsLittleEndian ? I : (NumBytes - 1 - I);
+    Data[Offset + Idx] |= uint8_t((Value >> (I * 8)) & 0xff);
+  }
 }
 
 bool

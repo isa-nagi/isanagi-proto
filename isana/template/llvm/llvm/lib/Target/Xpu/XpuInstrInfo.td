@@ -257,15 +257,14 @@ def call_symbol : Operand<iPTR> {
   let ParserMatchClass = CallSymbol;
 }
 def PseudoCALL : {{ Xpu }}Inst<(outs), (ins call_symbol:$func),
-  "",
-  []>,
-  PseudoInstExpansion<({{ pseudo_call_dag }})>
+  "{{ pseudo_call_asm }}",
+  []>
+  //, PseudoInstExpansion<({{ pseudo_call_dag }})>
 {
   let isPseudo = 1;
   let isCodeGenOnly = 1;
   let isCall = 1;
   let Defs = [{{ RA }}];
-  //let Size = 8;
 }
 def : Pat<({{ xpu }}_call tglobaladdr:$func), (PseudoCALL tglobaladdr:$func)>;
 def : Pat<({{ xpu }}_call texternalsym:$func), (PseudoCALL texternalsym:$func)>;
