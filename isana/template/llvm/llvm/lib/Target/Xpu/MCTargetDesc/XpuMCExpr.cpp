@@ -25,9 +25,9 @@ StringRef {{ Xpu }}MCExpr::getVariantKindName(VariantKind Kind) {
   case VK_{{ Xpu }}_None:
     return "";
   case VK_{{ Xpu }}_CALL:  // TODO fix it
-    return "@CALL";
+    return "";
   case VK_{{ Xpu }}_SYMBOL:
-    return "@SYMBOL";
+    return "";
   }
 }
 
