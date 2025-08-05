@@ -142,9 +142,10 @@ class Fixup(KwargsClass):
         'offset',
         'size',
         'flags',
+        'is_call',
+        'is_pcrel',
         'reloc_procs',
         'val_carryed',
-        'is_pcrel',
     )
 
     def __init__(self, **kwargs):
@@ -153,10 +154,29 @@ class Fixup(KwargsClass):
         self.name = kwargs.pop('name', str())
         self.addend = kwargs.pop('addend', None)
         self.bin = kwargs.pop('bin', None)
+        self.offset = kwargs.pop('offset', 0)
+        self.size = kwargs.pop('size', 0)
+        self.flags = kwargs.pop('flags', 0)
         self.name_enum = f"fixup_{self.target.lower()}_{self.name}"
+        self.is_call = kwargs.pop('is_call', False)
+        self.is_pcrel = kwargs.pop('is_pcrel', False)
         self.reloc_procs = list()
         self.val_carryed = str()
-        self.is_pcrel = False
+        super().__init__(**kwargs)
+
+
+class Relocation(Fixup):
+    pass
+
+
+class AsmExpr(KwargsClass):
+    keys = (
+        'name',
+    )
+
+    def __init__(self, **kwargs):
+        self.name = kwargs.pop('name', None)
+        self.ast = list()
         super().__init__(**kwargs)
 
 
@@ -275,6 +295,7 @@ def auto_make_relocations(isa, li_ops, call_ops):
         fixup.reloc_procs = procs
     for fixup in fixups:
         if fixup.name == "call":
+            fixup.is_call = True
             procs = list()
             if call_ops["longcall"]:
                 ops = call_ops["longcall"][0]
@@ -320,7 +341,145 @@ def auto_make_relocations(isa, li_ops, call_ops):
                     bit_sum += bits.size()
             fixup.size = sum([instr.bin.bitsize for instr in fixup.instrs])
             fixup.reloc_procs = procs
+    for i, fixup in enumerate(fixups):
+        fixup.number = i + 1
     return fixups
+
+
+def fill_fixups(isa, fixups, li_ops):
+    (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    instr_reloc_table = dict()
+    for fixup in fixups:
+        if hasattr(fixup, "instrs"):
+            for instr in fixup.instrs:
+                instr_reloc_table[instr] = fixup
+            instr = fixup.instrs[0]
+            bin_filtered = re.sub(r"\$(?!opc|imm)\w+", r"$_", str(instr.bin))
+            fixup.bin = bin_filtered
+        else:
+            fixup.bin = fixup.size
+
+    for fixup in fixups:
+        if fixup.is_pcrel:
+            fixup.flags = "MCFixupKindInfo::FKF_IsPCRel"
+
+    for fixup in fixups:
+        procs = list()
+        if fixup.bin is None:
+            raise Exception("fixup must have bins: {}".format(fixup.name))
+        if fixup.is_call:
+            pass
+        elif isinstance(fixup.bin, int):
+            procs.append("  | val")
+        else:
+            # get symbol imm type
+            val_carryed = "val"
+            if "imm" in fixup.instrs[0].prm.inputs:
+                is_lui = False
+                for instr in fixup.instrs:
+                    if instr in [op[0] for op in lui_s]:
+                        is_lui = True
+                        immobj = isa.get_param_obj("imm", instr)
+                if is_lui and immobj.offset > 0:
+                    val_carryed = "((val + {}) & ~{})".format(
+                        2 ** (immobj.offset - 1),
+                        2 ** immobj.offset - 1,
+                    )
+            fixup.val_carryed = val_carryed
+
+            bit_sum = 0
+            for bits in reversed(fixup.instrs[0].bin.bitss):
+                if bits.label == "$imm":
+                    procs.append("  | (((val >> {}) & {}) << {})".format(
+                        bits.lsb,
+                        2 ** bits.size() - 1,
+                        bit_sum,
+                    ))
+                bit_sum += bits.size()
+        fixup.reloc_procs = procs
+
+    for fixup in fixups:
+        if fixup.is_call:
+            procs = list()
+            if len(fixup.instrs) > 1:
+                pos_sum = 0
+                for op in fixup.instrs:
+                    val_carryed = "val"
+                    if is_lui_like(op, lui_s):
+                        if may_use_pc_relative(op):
+                            fixup.flags = "MCFixupKindInfo::FKF_IsPCRel"
+                            fixup.is_pcrel = True
+                        immobj = isa.get_param_obj("imm", op)
+                        val_carryed = "((val + {}) & ~{})".format(
+                            2 ** (immobj.offset - 1),
+                            2 ** immobj.offset - 1,
+                        )
+                    bit_sum = 0
+                    procs.append("| ((0 // {}".format(op.opn))
+                    for bits in reversed(op.bin.bitss):
+                        if bits.label == "$imm":
+                            procs.append("  | ((({val} >> {}) & {}) << {})".format(
+                                bits.lsb,
+                                2 ** bits.size() - 1,
+                                bit_sum,
+                                val=val_carryed,
+                            ))
+                        bit_sum += bits.size()
+                    procs.append(") << {})".format(pos_sum))
+                    pos_sum += op.bin.bitsize
+            else:
+                op = fixup.instrs[0]
+                bit_sum = 0
+                procs.append("  | val")
+                for bits in reversed(op.bin.bitss):
+                    if bits.label == "$imm":
+                        procs.append("  | (((val >> {}) & {}) << {})".format(
+                            bits.lsb,
+                            2 ** bits.size() - 1,
+                            bit_sum,
+                        ))
+                    bit_sum += bits.size()
+            fixup.size = sum([instr.bin.bitsize for instr in fixup.instrs])
+            fixup.reloc_procs = procs
+
+
+def collect_asm_exprs(fixups):
+    expr_srcs = {}
+    for fixup in fixups:
+        if hasattr(fixup, "expr"):
+            expr_srcs.setdefault(fixup.expr, list())
+            expr_srcs[fixup.expr].append(fixup)
+    srcs = list(set(expr_srcs.keys()))
+    call_exprs = []
+    other_exprs = []
+    def get_modifier(src):
+        if m := re.match(r"%(\w+)\(.+\)", src):
+            return m.group(1)
+        raise Exception(
+            "Relocation Expression format must be \"%modifier($expr)\" : {}".format(src))
+    for i, src in enumerate(srcs):
+        name = get_modifier(src) or f"expr{i}"
+        expr = AsmExpr(name=name, src=src)
+        ast = re.split(r"\$expr", src)
+        if ast[0] == "" and ast[1] == "":
+            ast = ["$expr"]
+        else:
+            ast.insert(1, "$expr")
+        expr.ast = ast
+        expr.fixups = expr_srcs[src]
+        if expr.fixups[0].is_call:
+            call_exprs.append(expr)
+        else:
+            other_exprs.append(expr)
+    if not call_exprs:
+        expr = AsmExpr(name="call", src="", ast=["$expr"])
+        expr.fixups = [fx for fx in fixups if fx.is_call]
+        call_exprs.append(expr)
+    if not other_exprs:
+        expr = AsmExpr(name="symbol", src="", ast=["$expr"])
+        expr.fixups = [fx for fx in fixups if not fx.is_call and not fx.is_pcrel]
+        other_exprs.append(expr)
+    return other_exprs, call_exprs
 
 
 def get_instr_pattern(instr):
@@ -1089,34 +1248,54 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
     return codes
 
 
-def estimate_getaddr_codes(isa, li_ops, phase):
+def estimate_getaddr_codes(isa, exprs, li_ops, phase):
     (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    lui_op, lui_imm = lui_addi_s[0][0]
+    addi_op, addi_imm = lui_addi_s[0][1]
+
+    expr_sym_hi = list()
+    expr_sym_lo = list()
+    hi_fixup = None
+    for expr in exprs:
+        for fixup in expr.fixups:
+            if hasattr(fixup, "instrs") and lui_op in fixup.instrs:
+                expr_sym_hi.append(expr)
+                if not hi_fixup:
+                    hi_fixup = fixup
+    for expr in exprs:
+        for fixup in expr.fixups:
+            if hasattr(fixup, "instrs") and addi_op in fixup.instrs:
+                if fixup.is_pcrel == hi_fixup.is_pcrel:
+                    expr_sym_lo.append(expr)
+    if not expr_sym_hi or not expr_sym_lo:
+        raise Exception("Not found sym hi/lo Expr for get address")
     codes = list()
-    for ops in addi_s + lui_addi_s:
-        if phase == 'lla':
-            pass
-        elif phase == 'lga':
-            pass
-        elif phase == 'la':
-            ops = lui_addi_s[0]
-            lui_op, lui_imm = ops[0]
-            addi_op, addi_imm = ops[1]
-            codes = [
-                "SDValue AddrHi = getTargetNode(N, DL, Ty, DAG, {{Xpu}}II::{mo_sym_hi});".format(
-                    mo_sym_hi="MO_SYMBOL",
-                ),
-                "SDValue AddrLo = getTargetNode(N, DL, Ty, DAG, {{Xpu}}II::{mo_sym_lo});".format(
-                    mo_sym_lo="MO_SYMBOL",
-                ),
-                "SDValue MNHi = SDValue(DAG.getMachineNode({{Xpu}}::{lui}, DL, Ty, AddrHi), 0);".format(
-                    lui=lui_op.__name__.upper(),
-                ),
-                "return SDValue(DAG.getMachineNode({{Xpu}}::{addi}, DL, Ty, MNHi, AddrLo), 0);".format(
-                    addi=addi_op.__name__.upper(),
-                ),
-            ]
-        else:
-            raise Exception(f'Unknown phase: {phase}')
+    if phase == 'lla':
+        pass
+    elif phase == 'lga':
+        pass
+    elif phase == 'la':
+        ops = lui_addi_s[0]
+        lui_op, lui_imm = ops[0]
+        addi_op, addi_imm = ops[1]
+        codes = [
+            "SDValue AddrHi = getTargetNode(N, DL, Ty, DAG, {{Xpu}}II::{mo_sym_hi});".format(
+                # mo_sym_lo="MO_SYMBOL",
+                mo_sym_hi="MO_{}".format(expr_sym_hi[0].name.upper()),
+            ),
+            "SDValue AddrLo = getTargetNode(N, DL, Ty, DAG, {{Xpu}}II::{mo_sym_lo});".format(
+                # mo_sym_lo="MO_SYMBOL",
+                mo_sym_lo="MO_{}".format(expr_sym_lo[0].name.upper()),
+            ),
+            "SDValue MNHi = SDValue(DAG.getMachineNode({{Xpu}}::{lui}, DL, Ty, AddrHi), 0);".format(
+                lui=lui_op.__name__.upper(),
+            ),
+            "return SDValue(DAG.getMachineNode({{Xpu}}::{addi}, DL, Ty, MNHi, AddrLo), 0);".format(
+                addi=addi_op.__name__.upper(),
+            ),
+        ]
+    else:
+        raise Exception(f'Unknown phase: {phase}')
     return codes
 
 
@@ -1380,11 +1559,14 @@ def estimate_long_br_codes(isa, br_ops, jump_ops, zeroreg, fixups):
 class LLVMCompiler():
     target = _default_target
     triple = tuple(_default_triple)
-    fixups = tuple()
+    relocations = tuple()
 
     def __init__(self, isa):
         self.isa = isa
         self.outdir = "out"
+        self.fixups = list()
+        if self.relocations:
+            self.fixups = list(self.relocations)
         self._prepare_processorinfo()
 
     @property
@@ -1804,6 +1986,7 @@ class LLVMCompiler():
 
         # llvm/lib/Target/Xpu/MCTargetDesc/XpuAsmBackend.cpp
         if len(self.fixups) > 0:
+            fill_fixups(self.isa, self.fixups, li_ops)
             fixups = self.fixups[:]
         else:
             fixups = auto_make_fixups(self.isa, li_ops, call_ops)
@@ -1816,10 +1999,12 @@ class LLVMCompiler():
         fixups_should_force_reloc = list()
         fixups_adjust = fixups[:]
         relax_instrs = list()
-        fixups_pc_rel = [fx for fx in fixups if fx.name[:6] == "pc_rel"]
-        fixups_pc_use = [fx for fx in fixups if fx.name[:6] == "pc_use"]
-        fixup_relocs = [fx for fx in fixups if not isinstance(fx.bin, int)]
-        fixup_call = next(filter(lambda fx: fx.name == "call", fixups), None)
+        fixups_pc_rel = [fx for fx in fixups if fx.is_pcrel and not fx.is_call]
+        fixup_relocs = [fx for fx in fixups if not isinstance(fx.bin, int) and not fx.is_call]
+        fixups_noexpr = [fx for fx in fixup_relocs if not hasattr(fx, "expr")]
+        fixup_call = next(filter(lambda fx: fx.is_call, fixups), None)
+
+        other_exprs, call_exprs = collect_asm_exprs(fixups)
 
         instr_aliases = []
         for alias in self.isa.instruction_aliases:
@@ -1878,7 +2063,7 @@ class LLVMCompiler():
             selectaddr_imm_codes.append((cond, vardefs, sdvalues))
 
         # llvm/lib/Target/Xpu/XpuISelLowering.cpp
-        _codes = estimate_getaddr_codes(self.isa, li_ops, phase='la')  # lla, lga, la
+        _codes = estimate_getaddr_codes(self.isa, other_exprs, li_ops, phase='la')  # lla, lga, la
         getaddr_la_sdvalue_codes = []
         for code in _codes:
             code = code.format(Xpu=self.namespace)
@@ -1944,9 +2129,12 @@ class LLVMCompiler():
             "relax_instrs": relax_instrs,
 
             "fixups_pc_rel": fixups_pc_rel,
-            "fixups_pc_use": fixups_pc_use,
             "fixup_relocs": fixup_relocs,
+            "fixups_noexpr": fixups_noexpr,
             "fixup_call": fixup_call,
+
+            "asm_call_exprs": call_exprs,
+            "asm_other_exprs": other_exprs,
 
             "instr_aliases": instr_aliases,
 

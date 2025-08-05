@@ -215,24 +215,29 @@ unsigned
     case {{ Xpu }}MCExpr::VK_{{ Xpu }}_None:
     case {{ Xpu }}MCExpr::VK_{{ Xpu }}_Invalid:
       llvm_unreachable("Unhandled fixup kind!");
-    case {{ Xpu }}MCExpr::VK_{{ Xpu }}_CALL:
-      FixupKind = {{ Xpu }}::fixup_{{ xpu }}_call;
+    {%- for expr in asm_call_exprs %}
+    case {{ Xpu }}MCExpr::VK_{{ Xpu }}_{{ expr.name.upper() }}:
+      FixupKind = {{ Xpu }}::{{ expr.fixups[0].name_enum }};
       break;
-    case {{ Xpu }}MCExpr::VK_{{ Xpu }}_SYMBOL:
+    {%- endfor %}
+    {%- for expr in asm_other_exprs %}
+    case {{ Xpu }}MCExpr::VK_{{ Xpu }}_{{ expr.name.upper() }}:
       {
         unsigned Opcode = MI.getOpcode();
         switch (Opcode) {
         default:
           break;
-        {% for fx in fixup_relocs -%}
-        {% for instr in fx.instrs -%}
+        {% for fx in expr.fixups -%}
+        {% if fx.instrs %}{% for instr in fx.instrs -%}
         case {{ Xpu }}::{{ instr.__name__.upper() }}:
-        {% endfor %}  FixupKind = {{ Xpu }}::{{ fx.name_enum}};
+        {% endfor %}  FixupKind = {{ Xpu }}::{{ fx.name_enum }};
           break;
+        {% endif -%}
         {% endfor -%}
         }
       }
       break;
+    {%- endfor %}
     }
   } else if ((Kind == MCExpr::SymbolRef &&
                  cast<MCSymbolRefExpr>(Expr)->getKind() ==
@@ -242,11 +247,12 @@ unsigned
       switch (Opcode) {
       default:
         break;
-      {% for fx in fixup_relocs -%}
-      {% for instr in fx.instrs -%}
+      {% for fx in fixups_noexpr -%}
+      {% if fx.instrs %}{% for instr in fx.instrs -%}
       case {{ Xpu }}::{{ instr.__name__.upper() }}:
-      {% endfor %}  FixupKind = {{ Xpu }}::{{ fx.name_enum}};
+      {% endfor %}  FixupKind = {{ Xpu }}::{{ fx.name_enum }};
         break;
+      {% endif -%}
       {% endfor -%}
       }
   }

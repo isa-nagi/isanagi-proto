@@ -137,12 +137,11 @@ static MCOperand lowerSymbolOperand(const MachineOperand &MO, MCSymbol *Sym,
   case {{ Xpu }}II::MO_None:
     Kind = {{ Xpu }}MCExpr::VK_{{ Xpu }}_None;
     break;
-  case {{ Xpu }}II::MO_CALL:
-    Kind = {{ Xpu }}MCExpr::VK_{{ Xpu }}_CALL;
+  {%- for expr in asm_call_exprs + asm_other_exprs %}
+  case {{ Xpu }}II::MO_{{ expr.name.upper() }}:
+    Kind = {{ Xpu }}MCExpr::VK_{{ Xpu }}_{{ expr.name.upper() }};
     break;
-  case {{ Xpu }}II::MO_SYMBOL:
-    Kind = {{ Xpu }}MCExpr::VK_{{ Xpu }}_SYMBOL;
-    break;
+  {%- endfor %}
   }
 
   const MCExpr *ME =

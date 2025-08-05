@@ -33,9 +33,12 @@ RelExpr {{ Xpu }}::getRelExpr(RelType type, const Symbol &s,
   case R_{{ XPU }}_{{ fixup_call.name.upper() }}:
     // return R_PLT_PC;
     return R_PC;
-  {% for fx in fixups_pc_rel + fixups_pc_use -%}
+  {%- for fx in fixups_pc_rel %}
   case R_{{ XPU }}_{{ fx.name.upper() }}:
-  {% endfor %}  return R_PC;
+  {%- endfor %}
+  {%- if fixups_pc_rel %}
+    return R_PC;
+  {%- endif %}
   default:
     return R_ABS;
   }

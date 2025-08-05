@@ -58,6 +58,7 @@ class {{ Xpu }}AsmParser : public MCTargetAsmParser {
   {% for asmopcls in asm_operand_clss -%}
   ParseStatus parse{{ asmopcls.name }}AsmOp(OperandVector &Operands);
   {% endfor -%}
+  ParseStatus parseOperandWithModifier(OperandVector &Operands);
   ParseStatus parseCallSymbol(OperandVector &Operands);
   bool parseOperand(OperandVector &Operands, StringRef Mnemonic);
 
@@ -356,6 +357,10 @@ ParseStatus {{ Xpu }}AsmParser::parseRegister(OperandVector &Operands) {
 }
 
 ParseStatus {{ Xpu }}AsmParser::parseImmediate(OperandVector &Operands) {
+  const MCExpr *IdVal;
+  SMLoc S = getLoc();
+  SMLoc E;
+
   switch (getLexer().getKind()) {
   default:
     return ParseStatus::NoMatch;
@@ -366,17 +371,42 @@ ParseStatus {{ Xpu }}AsmParser::parseImmediate(OperandVector &Operands) {
   case AsmToken::String:
   case AsmToken::Identifier:
     break;
+  case AsmToken::Percent:
+    return parseOperandWithModifier(Operands);
   }
 
-  const MCExpr *IdVal;
-  SMLoc S = getLoc();
-
-  if (getParser().parseExpression(IdVal))
+  if (getParser().parseExpression(IdVal, E))
     return ParseStatus::Failure;
 
-  SMLoc E = SMLoc::getFromPointer(S.getPointer() - 1);
   Operands.push_back({{ Xpu }}Operand::createImm(IdVal, S, E));
 
+  return ParseStatus::Success;
+}
+
+ParseStatus {{ Xpu }}AsmParser::parseOperandWithModifier(OperandVector &Operands) {
+  SMLoc S = getLoc();
+  SMLoc E;
+
+  if (parseToken(AsmToken::Percent, "expected '%' for operand modifier"))
+    return ParseStatus::Failure;
+
+  if (getLexer().getKind() != AsmToken::Identifier)
+    return Error(getLoc(), "expected valid identifier for operand modifier");
+  StringRef Identifier = getParser().getTok().getIdentifier();
+  {{ Xpu }}MCExpr::VariantKind VK = {{ Xpu }}MCExpr::getVariantKindForName(Identifier);
+  if (VK == {{ Xpu }}MCExpr::VK_{{ Xpu }}_Invalid)
+    return Error(getLoc(), "unrecognized operand modifier");
+
+  getParser().Lex(); // Eat the identifier
+  if (parseToken(AsmToken::LParen, "expected '('"))
+    return ParseStatus::Failure;
+
+  const MCExpr *SubExpr;
+  if (getParser().parseParenExpression(SubExpr, E))
+    return ParseStatus::Failure;
+
+  const MCExpr *ModExpr = {{ Xpu }}MCExpr::create(SubExpr, VK, getContext());
+  Operands.push_back({{ Xpu }}Operand::createImm(ModExpr, S, E));
   return ParseStatus::Success;
 }
 

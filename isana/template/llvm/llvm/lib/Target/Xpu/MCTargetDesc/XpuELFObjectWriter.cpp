@@ -50,7 +50,7 @@ unsigned
       return ELF::R_CKCORE_PCREL32;
     case {{ Xpu }}::{{ fixup_call.name_enum }}:
       return ELF::R_{{ XPU }}_CALL;
-    {% for fx in fixups_pc_rel + fixups_pc_use -%}
+    {% for fx in fixups_pc_rel -%}
     case {{ Xpu }}::{{ fx.name_enum }}:
       return ELF::R_{{ XPU }}_{{ fx.name.upper() }};
     {% endfor %}

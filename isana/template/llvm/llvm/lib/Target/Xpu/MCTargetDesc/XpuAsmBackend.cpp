@@ -69,7 +69,7 @@ adjustFixupValue(
   {% for fx in fixups_adjust -%}
   case {{ Xpu }}::{{ fx.name_enum }}: {
     {% if fx.reloc_procs -%}
-    const uint64_t val = Value;  // TODO: remove unused variable
+    const uint64_t val = Value;
     {% endif -%}
     return 0
     {%- for proc in fx.reloc_procs %}

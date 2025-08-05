@@ -12,8 +12,9 @@ class {{ Xpu }}MCExpr : public MCTargetExpr {
 public:
   enum VariantKind {
     VK_{{ Xpu }}_None,
-    VK_{{ Xpu }}_CALL,
-    VK_{{ Xpu }}_SYMBOL,
+    {%- for expr in asm_call_exprs + asm_other_exprs %}
+    VK_{{ Xpu }}_{{ expr.name.upper() }},
+    {%- endfor %}
     VK_{{ Xpu }}_Invalid
   };
 
@@ -52,6 +53,7 @@ public:
     return E->getKind() == MCExpr::Target;
   }
 
+  static VariantKind getVariantKindForName(StringRef name);
   static StringRef getVariantKindName(VariantKind Kind);
 };
 } // end namespace llvm

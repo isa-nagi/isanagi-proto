@@ -3,7 +3,9 @@
 #error "ELF_RELOC must be defined"
 #endif
 
+{% if fixups[0].number != 0 -%}
 ELF_RELOC(R_{{ XPU }}_NONE, 0)
+{%- endif -%}
 {% for fx in fixups -%}
-ELF_RELOC(R_{{ XPU }}_{{ fx.name.upper() }}, {{ loop.index }})
+ELF_RELOC(R_{{ XPU }}_{{ fx.name.upper() }}, {{ fx.number }})
 {% endfor %}

@@ -18,16 +18,28 @@ const {{ Xpu }}MCExpr *{{ Xpu }}MCExpr::create(const MCExpr *Expr, VariantKind K
   return new (Ctx) {{ Xpu }}MCExpr(Kind, Expr);
 }
 
+{{ Xpu }}MCExpr::VariantKind {{ Xpu }}MCExpr::getVariantKindForName(StringRef name) {
+  return StringSwitch<{{ Xpu }}MCExpr::VariantKind>(name)
+  {%- for expr in asm_other_exprs %}
+      .Case("{{ expr.name }}", VK_{{ Xpu }}_{{ expr.name.upper() }})
+  {%- endfor %}
+      .Default(VK_{{ Xpu }}_Invalid);
+}
+
 StringRef {{ Xpu }}MCExpr::getVariantKindName(VariantKind Kind) {
   switch (Kind) {
   default:
     llvm_unreachable("Invalid ELF symbol kind");
   case VK_{{ Xpu }}_None:
     return "";
-  case VK_{{ Xpu }}_CALL:  // TODO fix it
-    return "";
-  case VK_{{ Xpu }}_SYMBOL:
-    return "";
+  {%- for expr in asm_call_exprs %}
+  case VK_{{ Xpu }}_{{ expr.name.upper() }}:
+    return "{{ expr.name }}";
+  {%- endfor %}
+  {%- for expr in asm_other_exprs %}
+  case VK_{{ Xpu }}_{{ expr.name.upper() }}:
+    return "{{ expr.name }}";
+  {%- endfor %}
   }
 }
 
@@ -36,8 +48,24 @@ void {{ Xpu }}MCExpr::visitUsedExpr(MCStreamer &Streamer) const {
 }
 
 void {{ Xpu }}MCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
-  Expr->print(OS, MAI);
-  OS << getVariantKindName(getKind());
+  // Expr->print(OS, MAI);
+  // OS << getVariantKindName(getKind());
+  switch (getKind()) {
+  default:
+    Expr->print(OS, MAI);
+    break;
+  {%- for expr in asm_call_exprs + asm_other_exprs %}
+  case {{ Xpu }}MCExpr::VK_{{ Xpu }}_{{ expr.name.upper() }}:
+    {%- for ast in expr.ast %}
+    {%- if ast == "$expr" %}
+    Expr->print(OS, MAI);
+    {%- else %}
+    OS << "{{ ast }}";
+    {%- endif %}
+    {%- endfor %}
+    break;
+  {%- endfor %}
+  }
 }
 
 void {{ Xpu }}MCExpr::fixELFSymbolsInTLSFixups(MCAssembler &Asm) const {
@@ -79,7 +107,10 @@ bool {{ Xpu }}MCExpr::evaluateAsConstant(int64_t &Res) const
 {
   MCValue Value;
 
-  if (Kind == VK_{{ Xpu }}_CALL)  // TODO fix it
+  if ({% for expr in asm_call_exprs + asm_other_exprs %}
+  {% if not loop.first %}|| {% endif -%}
+  Kind == VK_{{ Xpu }}_{{ expr.name.upper() }}
+  {%- endfor %})
     return false;
 
   if (!getSubExpr()->evaluateAsRelocatable(Value, nullptr, nullptr))

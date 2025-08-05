@@ -22,8 +22,9 @@ namespace {{ Xpu }}II {
 // {{ Xpu }} Specific Machine Operand Flags
 enum {
   MO_None = 0,
-  MO_CALL,
-  MO_SYMBOL,
+  {%- for expr in asm_call_exprs + asm_other_exprs %}
+  MO_{{ expr.name.upper() }},  // {{ expr.src }}
+  {%- endfor %}
 };
 } // namespace {{ Xpu }}II
 

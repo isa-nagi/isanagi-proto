@@ -106,8 +106,8 @@ _trap(void)
                 //".option	norelax\n"
                 "csrrw  sp, mscratch, sp\n"
                 // "la	sp, __heap_end\n"
-                "lui	sp, __heap_end\n"
-                "addi	sp, sp, __heap_end\n"
+                "lui	sp, %hi(__heap_end)\n"
+                "addi	sp, sp, %lo(__heap_end)\n"
                 //".option	pop"
           );
 
@@ -157,8 +157,8 @@ _trap(void)
          * Pass pointer to saved registers in first parameter register
          */
         // __asm__("la	gp, __global_pointer$");
-        __asm__("lui	gp, __global_pointer$");
-        __asm__("addi	gp, gp, __global_pointer$");
+        __asm__("lui	gp, %hi(__global_pointer$)");
+        __asm__("addi	gp, gp, %lo(__global_pointer$)");
         __asm__("mv     a0, sp");
 
         /* Enable FPU (just in case) */
@@ -195,11 +195,11 @@ _start(void)
 	// __asm__(".option	push\n"
  //                ".option	norelax\n"
                 // "la	sp, __stack\n"
-                "lui	t0, __stack\n"
-                "addi	sp, t0, __stack\n"
+                "lui	t0, %hi(__stack)\n"
+                "addi	sp, t0, %lo(__stack)\n"
                 // "la	gp, __global_pointer$\n"
-                "lui	t0, __global_pointer$\n"
-                "addi	gp, t0, __global_pointer$\n"
+                "lui	t0, %hi(__global_pointer$)\n"
+                "addi	gp, t0, %lo(__global_pointer$)\n"
                 // ".option	pop");
                 );
 
@@ -214,8 +214,8 @@ _start(void)
 #endif
 #ifdef CRT0_SEMIHOST
         // __asm__("la     t0, _trap");
-        __asm__("lui     t0, _trap");
-        __asm__("addi     t0, t0, _trap");
+        __asm__("lui     t0, %hi(_trap)");
+        __asm__("addi     t0, t0, %lo(_trap)");
         __asm__("csrw   mtvec, t0");
         __asm__("csrr   t1, mtvec");
 #endif
