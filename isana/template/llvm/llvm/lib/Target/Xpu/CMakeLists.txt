@@ -28,7 +28,7 @@ add_llvm_target({{ Xpu }}CodeGen
   # {{ Xpu }}DeadRegisterDefinitions.cpp
   # {{ Xpu }}MakeCompressible.cpp
   # {{ Xpu }}ExpandAtomicPseudoInsts.cpp
-  # {{ Xpu }}ExpandPseudoInsts.cpp
+  {{ Xpu }}ExpandPseudoInsts.cpp
   {{ Xpu }}FrameLowering.cpp
   # {{ Xpu }}GatherScatterLowering.cpp
   # {{ Xpu }}IndirectBranchTracking.cpp
@@ -42,7 +42,6 @@ add_llvm_target({{ Xpu }}CodeGen
   {{ Xpu }}MachineFunctionInfo.cpp
   # {{ Xpu }}MergeBaseOffset.cpp
   # {{ Xpu }}OptWInstrs.cpp
-  # {{ Xpu }}PostRAExpandPseudoInsts.cpp
   # {{ Xpu }}RedundantCopyElimination.cpp
   # {{ Xpu }}MoveMerger.cpp
   # {{ Xpu }}PushPopOptimizer.cpp

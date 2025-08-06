@@ -284,3 +284,15 @@ def PseudoCALLIndirect : {{ Xpu }}Inst<(outs), (ins GPR:$rs1),
 {% for instr_alias in instr_aliases -%}
 def : {{ instr_alias }};
 {% endfor %}
+
+//=== Pseudo Instruction Defs
+class PseudoAsmInstr<dag outs, dag ins, list<dag> pattern, string asmstr>
+    : {{ Xpu }}Inst<outs, ins, asmstr, pattern> {
+  let isPseudo = 1;
+  // let isCodeGenOnly = 1;
+  // let isAsmParserOnly = 1;
+}
+
+{% for pseudo in pseudo_instrs -%}
+def Pseudo{{ pseudo.name }} : PseudoAsmInstr<{{ pseudo.defs }}>;
+{% endfor %}

@@ -14,6 +14,13 @@ class PassRegistry;
 FunctionPass *create{{ Xpu }}ISelDag({{ Xpu }}TargetMachine &TM,
                                 CodeGenOptLevel OptLevel);
 void initialize{{ Xpu }}DAGToDAGISelLegacyPass(PassRegistry &);
+
+FunctionPass *create{{ Xpu }}PreRAExpandPseudoPass();
+void initialize{{ Xpu }}PreRAExpandPseudoPass(PassRegistry &);
+FunctionPass *create{{ Xpu }}PostRAExpandPseudoPass();
+void initialize{{ Xpu }}PostRAExpandPseudoPass(PassRegistry &);
+FunctionPass *create{{ Xpu }}ExpandPseudoPass();
+void initialize{{ Xpu }}ExpandPseudoPass(PassRegistry &);
 } // namespace llvm
 
 #endif

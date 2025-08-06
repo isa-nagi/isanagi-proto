@@ -8,6 +8,7 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
@@ -42,12 +43,20 @@ class {{ Xpu }}AsmParser : public MCTargetAsmParser {
   bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
 
+  void emitToStreamer(MCStreamer &S, const MCInst &Inst);
+
   // "=" is used as assignment operator for assembly statment, so can't be used
   // for symbol assignment.
   bool equalIsAsmAssignment() override { return false; }
   // "*" is used for dereferencing memory that it will be the start of
   // statement.
   bool starIsStartOfStatement() override { return true; }
+
+  bool expandPseudo(MCInst &Inst, SMLoc IDLoc, OperandVector &Operands,
+                    MCStreamer &Out);
+  {% for pseudo in pseudo_instrs %}
+  void emit{{ pseudo.name }}(MCInst &Inst, SMLoc IDLoc, MCStreamer &Out);
+  {%- endfor %}
 
 #define GET_ASSEMBLER_HEADER
 #include "{{ Xpu }}GenAsmMatcher.inc"
@@ -277,9 +286,10 @@ bool {{ Xpu }}AsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   default:
     break;
   case Match_Success:
-    Inst.setLoc(IDLoc);
-    Out.emitInstruction(Inst, getSTI());
-    return false;
+    // Inst.setLoc(IDLoc);
+    // Out.emitInstruction(Inst, getSTI());
+    // return false;
+    return expandPseudo(Inst, IDLoc, Operands, Out);
   case Match_MissingFeature:
     return Error(IDLoc, "instruction use requires an option to be enabled");
   case Match_MnemonicFail:
@@ -541,6 +551,44 @@ bool {{ Xpu }}AsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef 
   }
   return false;
 }
+
+void {{ Xpu }}AsmParser::emitToStreamer(MCStreamer &S, const MCInst &Inst) {
+  MCInst CInst;
+  S.emitInstruction(Inst, getSTI());
+}
+
+bool {{ Xpu }}AsmParser::expandPseudo(
+  MCInst &Inst, SMLoc IDLoc,
+  OperandVector &Operands,
+  MCStreamer &Out
+) {
+  Inst.setLoc(IDLoc);
+
+  switch (Inst.getOpcode()) {
+  default:
+    break;
+  {%- for pseudo in pseudo_instrs %}
+  case {{ Xpu }}::Pseudo{{ pseudo.name }}:
+    emit{{ pseudo.name }}(Inst, IDLoc, Out);
+    return false;
+  {%- endfor %}
+  }
+
+  Out.emitInstruction(Inst, getSTI());
+  return false;
+}
+
+{% for pseudo in pseudo_instrs %}
+void {{ Xpu }}AsmParser::emit{{ pseudo.name }}(
+  MCInst &Inst, SMLoc IDLoc, MCStreamer &Out
+) {
+  MCContext &Ctx = getContext();
+
+  {%- for line in pseudo.asmparse %}
+  {{ line }}
+  {%- endfor %}
+}
+{%- endfor %}
 
 bool {{ Xpu }}AsmParser::classifySymbolRef(const MCExpr *Expr,
                                        {{ Xpu }}MCExpr::VariantKind &Kind) {

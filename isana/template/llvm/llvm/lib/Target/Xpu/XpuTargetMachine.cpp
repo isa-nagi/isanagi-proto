@@ -21,6 +21,9 @@ extern "C" void LLVMInitialize{{ Xpu }}Target() {
 
   PassRegistry *Registry = PassRegistry::getPassRegistry();
   initialize{{ Xpu }}DAGToDAGISelLegacyPass(*Registry);
+  initialize{{ Xpu }}PreRAExpandPseudoPass(*Registry);
+  initialize{{ Xpu }}PostRAExpandPseudoPass(*Registry);
+  initialize{{ Xpu }}ExpandPseudoPass(*Registry);
 }
 
 static std::string computeDataLayout(const Triple &TT) {
@@ -74,6 +77,9 @@ public:
   }
 
   bool addInstSelector() override;
+  void addPreRegAlloc() override;
+  void addPreSched2() override;
+  void addPreEmitPass2() override;
 };
 }
 
@@ -81,6 +87,25 @@ bool {{ Xpu }}PassConfig::addInstSelector() {
   addPass(create{{ Xpu }}ISelDag(get{{ Xpu }}TargetMachine(), getOptLevel()));
 
   return false;
+}
+
+void {{ Xpu }}PassConfig::addPreRegAlloc() {
+  addPass(create{{ Xpu }}PreRAExpandPseudoPass());
+}
+
+void {{ Xpu }}PassConfig::addPreSched2() {
+  addPass(create{{ Xpu }}PostRAExpandPseudoPass());
+
+  // Emit KCFI checks for indirect calls.
+  // addPass(createKCFIPass());
+}
+
+void {{ Xpu }}PassConfig::addPreEmitPass2() {
+  addPass(create{{ Xpu }}ExpandPseudoPass());
+  // KCFI indirect call checks are lowered to a bundle.
+  // addPass(createUnpackMachineBundles([&](const MachineFunction &MF) {
+  //   return MF.getFunction().getParent()->getModuleFlag("kcfi");
+  // }));
 }
 
 TargetPassConfig *{{ Xpu }}TargetMachine::createPassConfig(PassManagerBase &PM) {

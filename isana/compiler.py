@@ -110,6 +110,28 @@ class InstrDefs(KwargsClass):
     )
 
 
+class PseudoDef(KwargsClass):
+    keys = (
+        'src',
+        'dsts',
+        'defs',
+        'buildmi',
+        'asmparse',
+        'alias',
+    )
+
+    def __init__(self, **kwargs):
+        self.name_orig = str()
+        self.name_count = 0
+        super().__init__(**kwargs)
+
+    @property
+    def name(self):
+        if self.name_count == 0:
+            return self.name_orig
+        return f"{self.name_orig}_{self.name_count}"
+
+
 instr_attr_table = {
     'is_return': ("isReturn", "isTerminator"),
     'is_jump': ("isBranch", "isTerminator"),
@@ -538,6 +560,307 @@ def get_instr_alias(alias, isa):
         # return s
 
 
+def extract_lui_addi_value_code(lui_imm, addi_imm, valname):
+    if hasattr(addi_imm, "signed"):
+        s = "(({val} + {half}) >> {shift}) & {mask}".format(
+            val=valname,
+            half=2 ** (lui_imm.offset - 1),
+            shift=lui_imm.offset,
+            mask=2 ** lui_imm.width - 1,
+        )
+    else:
+        s = "(({val} >> {shift})) & {mask}".format(
+            val=valname,
+            shift=lui_imm.offset,
+            mask=2 ** lui_imm.width - 1,
+        )
+    if hasattr(lui_imm, "signed"):
+        s = "SignExtend64<{width}>({s})".format(
+            width=lui_imm.width,
+            s=s,
+        )
+    lui_code = s
+
+    s = "{val} & {mask}".format(val=valname, mask=2 ** addi_imm.width - 1)
+    if hasattr(addi_imm, "signed"):
+        s = "SignExtend64<{width}>({s})".format(width=addi_imm.width, s=s)
+    addi_code = s
+    return (lui_code, addi_code)
+
+
+def get_pseudo_instr(alias, isa, call_exprs, li_ops, processed_pseudos):
+    if isinstance(alias, InstructionAlias):
+        return None
+    (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
+    names = []
+    for alias_ in processed_pseudos:
+        name_orig = re.sub(r"\W", r"_", alias_.src).upper()
+        names.append(name_orig)
+    if not isinstance(alias, PseudoInstruction):
+        return None
+    def get_modifier(src):
+        if m := re.match(r"%(\w+)\(.+\)", src):
+            return m.group(1)
+        raise Exception(
+            "Relocation Expression format must be \"%modifier($expr)\" : {}".format(src))
+
+    is_call = hasattr(alias, "is_call") and alias.is_call
+    is_li = hasattr(alias, "is_load_immediate") and alias.is_load_immediate
+
+    name_orig = re.sub(r"\W", r"_", alias.src).upper()
+    name_count = names.count(name_orig)
+    src = alias.src
+    dsts = []
+    for line in alias.dst:
+        dsts.append(line)
+
+    defs = []
+    src_ops = re.split(r"\s*,?\s+", alias.src)
+    _, src_ops = src_ops[0], src_ops[1:]
+    src_keys = [re.sub(r".*(\$\w+).*", r"\1", op) for op in src_ops]
+    dst_instrs = []
+    oparams = {}
+    iparams = {}
+    operand_maps = []
+    for asm in alias.dst:
+        dst_ops = re.split(r"\s*,?\s+", asm)
+        dst_opn, dst_ops = dst_ops[0], dst_ops[1:]
+        instr = next(filter(lambda x: x.opn == dst_opn, isa.instructions), None)
+        if not instr:
+            print("Warning: PseudoInstruction dst instruction not found:", asm)
+            return None
+        dst_ops_orig = re.split(r"\s*,?\s+", instr.asm.pattern)[1:]
+        dst_instrs.append(instr)
+        operand_map = []
+        for i, key in enumerate(dst_ops):
+            key_ = re.sub(r".*(\$\w+).*", r"\1", key)
+            if key_ in src_ops:
+                key_orig = dst_ops_orig[i]
+                key_orig_ = re.sub(r".*(\$\w+).*", r"\1", key_orig)
+                idx = src_ops.index(key_)
+                prmobj = isa.get_param_obj(key_orig_[1:], instr)
+                # tp = prmobj.label
+                operand_map.append((idx, prmobj, key_))
+                for param in instr.params.inputs.values():
+                    if param.label == key_orig_[1:]:
+                        iparams[key_[1:]] = [idx, "{}:${}".format(param.type_, key_[1:])]
+                    if key_[1:] in oparams:
+                        oparams.pop(key_[1:])
+                for param in instr.params.outputs.values():
+                    if param.label == key_orig_[1:]:
+                        oparams[key_[1:]] = [idx, "{}:${}".format(param.type_, key_[1:])]
+            else:
+                operand_map.append((key_, "unknown", key_))
+        operand_maps.append(operand_map)
+    oparams_ = [xx[1] for xx in sorted(list(oparams.values()), key=lambda x: x[0])]
+    iparams_ = [xx[1] for xx in sorted(list(iparams.values()), key=lambda x: x[0])]
+    defs = '(outs {}), (ins {}), [], "{}"'.format(
+        ", ".join(oparams_),
+        ", ".join(iparams_),
+        src,
+    )
+
+    # TODO: separate special pseudo (call, li, la, lla, lga, ...)
+    buildmi = []
+    if is_li:
+        def_syms = ["int64_t Val = MI.getOperand({}).getImm();".format(src_keys.index("$imm"))]
+        for i, ops in enumerate(li32_s):
+            if ops in lui_addi_s:
+                lui_op, lui_imm = ops[0]
+                lui_opname = lui_op.opn.upper()
+                addi_op, addi_imm = ops[1]
+                addi_opname = addi_op.opn.upper()
+                lui_code, addi_code = extract_lui_addi_value_code(lui_imm, addi_imm, "Val")
+                # TODO: support virtual register in expandPrePseudo
+                # lui
+                buildmi += [f"BuildMI(MBB, MBBI, DL, TII->get({{Xpu}}::{lui_opname}),"
+                            " MI.getOperand(0).getReg())"]
+                for param in lui_op.params.inputs.values():
+                    if isa.is_imm_type(param.type_):
+                        buildmi += [f".addImm({lui_code})"]
+                    else:
+                        buildmi += [f"/*{param} {param.type_}*/ "]
+                buildmi += [";"]
+                # addi
+                buildmi += [f"BuildMI(MBB, MBBI, DL, TII->get({{Xpu}}::{addi_opname}),"
+                            " MI.getOperand(0).getReg())"]
+                for param in addi_op.params.inputs.values():
+                    if isa.is_reg_type(param.type_):
+                        buildmi += [".addReg(MI.getOperand(0).getReg())"]
+                    elif isa.is_imm_type(param.type_):
+                        buildmi += [f".addImm({addi_code})"]
+                    else:
+                        buildmi += [f"/*{param} {param.type_}*/ "]
+                buildmi += [";"]
+            # elif ops in li_s or ops in lui_s:
+            #     pass
+            # else:
+            #     pass
+    else:
+        src_keys = [re.sub(r".*(\$\w+).*", r"\1", op) for op in src_ops]
+        if "$symbol" in src_keys:
+            def_syms = ["MachineOperand &Symbol = MI.getOperand({i});".format(i=src_keys.index("$symbol"))]
+        else:
+            def_syms = []
+        for i, dst in enumerate(alias.dst):
+            dst_ops = re.split(r"\s*,?\s+", dst)
+            dst_opn, dst_ops = dst_ops[0], dst_ops[1:]
+            instr = dst_instrs[i]
+            ss = []
+            if instr.prm.outputs:
+                ss.append("BuildMI(MBB, MBBI, DL, TII->get({{Xpu}}::{opn}), {vreg})".format(
+                    opn=instr.__name__.upper(),
+                    vreg="MI.getOperand(0).getReg()",
+                ))
+            else:
+                ss.append("BuildMI(MBB, MBBI, DL, TII->get({{Xpu}}::{opn}))".format(
+                    opn=instr.__name__.upper(),
+                ))
+            # TODO: support virtual register in expandPrePseudo
+            for mapi, (op, prmobj, label) in enumerate(operand_maps[i]):
+                if prmobj == "unknown":
+                    if op.isnumeric():
+                        s = "addImm"
+                        op = op
+                    else:
+                        s = "addReg"
+                        op = "{{Xpu}}::{}".format(op.upper())
+                elif isinstance(prmobj, Immediate):
+                    if label == "$symbol":
+                        if is_call and i != 0:
+                            s = "addImm"
+                            op = "0"
+                        else:
+                            s = "add"
+                            op = "Symbol"
+                    else:
+                        s = "addImm"
+                        op = "MI.getOperand({i}).getImm()".format(
+                            i=op,
+                        )
+                else:
+                    s = "addReg"
+                    op = "MI.getOperand({i}).getReg()".format(
+                        i=op,
+                    )
+                ss.append("  .{add}({op})".format(
+                    add=s,
+                    op=op,
+                ))
+            ss.append(";")
+            buildmi += ss
+    buildmi = def_syms + buildmi
+
+    asmparse = []
+    def_syms = []
+    if is_li:
+        def_syms = ["int64_t Val = Inst.getOperand({}).getImm();".format(src_keys.index("$imm"))]
+        for i, ops in enumerate(li32_s):
+            if ops in lui_addi_s:
+                lui_op, lui_imm = ops[0]
+                lui_opname = lui_op.opn.upper()
+                addi_op, addi_imm = ops[1]
+                addi_opname = addi_op.opn.upper()
+                lui_code, addi_code = extract_lui_addi_value_code(lui_imm, addi_imm, "Val")
+                # TODO: support virtual register in expandPrePseudo
+                # lui
+                asmparse += [f"emitToStreamer(Out, MCInstBuilder({{Xpu}}::{lui_opname})"]
+                asmparse += ["  .addOperand(Inst.getOperand(0))"]
+                for param in lui_op.params.inputs.values():
+                    if isa.is_imm_type(param.type_):
+                        asmparse += [f"  .addImm({lui_code})"]
+                    else:
+                        asmparse += [f"  /*{param} {param.type_}*/ "]
+                asmparse += ["  .setLoc(IDLoc)"]
+                asmparse += [");"]
+                # addi
+                asmparse += [f"emitToStreamer(Out, MCInstBuilder({{Xpu}}::{addi_opname})"]
+                asmparse += ["  .addOperand(Inst.getOperand(0))"]
+                for param in addi_op.params.inputs.values():
+                    if isa.is_reg_type(param.type_):
+                        asmparse += ["  .addOperand(Inst.getOperand(0))"]
+                    elif isa.is_imm_type(param.type_):
+                        asmparse += [f"  .addImm({addi_code})"]
+                    else:
+                        asmparse += [f"  /*{param} {param.type_}*/ "]
+                asmparse += ["  .setLoc(IDLoc)"]
+                asmparse += [");"]
+            # elif ops in li_s or ops in lui_s:
+            #     pass
+            # else:
+            #     pass
+    else:
+        for i, dst in enumerate(alias.dst):
+            dst_ops = re.split(r"\s*,?\s+", dst)
+            dst_opn, dst_ops = dst_ops[0], dst_ops[1:]
+            instr = dst_instrs[i]
+            ss = []
+            ss.append("emitToStreamer(Out, MCInstBuilder({{Xpu}}::{})".format(instr.__name__.upper()))
+            for mapi, (op, prmobj, label) in enumerate(operand_maps[i]):
+                if prmobj == "unknown":
+                    if op.isnumeric():
+                        s = "addImm"
+                        op = op
+                    else:
+                        s = "addReg"
+                        op = "{{Xpu}}::{}".format(op.upper())
+                elif isinstance(prmobj, Immediate):
+                    if label == "$symbol":
+                        if is_call and i != 0:
+                            s = "addImm"
+                            op = "0"
+                        else:
+                            if is_call:
+                                expr_name = call_exprs[0].name
+                            else:
+                                expr_name = get_modifier(dst_ops[mapi])
+                            def_sym = ["const {{Xpu}}MCExpr *Symbol{symi} = {{Xpu}}MCExpr::create("]
+                            def_sym += ["  Inst.getOperand({i}).getExpr(),"
+                                        " {{Xpu}}MCExpr::VK_{{Xpu}}_{expr_name}, Ctx);"]
+                            def_sym = [sym.format(
+                                symi=i,
+                                i=op,
+                                expr_name=expr_name.upper(),
+                            ) for sym in def_sym]
+                            def_syms += def_sym
+                            s = "addExpr"
+                            op = "Symbol{i}".format(
+                                i=i,
+                            )
+                    else:
+                        s = "addOperand"
+                        op = "Inst.getOperand({i}){suffix}".format(
+                            i=op,
+                            suffix="",
+                        )
+                else:
+                    s = "addOperand"
+                    op = "Inst.getOperand({i}){suffix}".format(
+                        i=op,
+                        suffix="",
+                    )
+                ss.append("  .{add}({op})".format(
+                    add=s,
+                    op=op,
+                ))
+            ss.append("  .setLoc(IDLoc)")
+            ss.append(");")
+            asmparse += ss
+    asmparse = def_syms + asmparse
+
+    return PseudoDef(
+        # name=name,
+        name_orig=name_orig,
+        name_count=name_count,
+        src=src,
+        dsts=dsts,
+        defs=defs,
+        buildmi=buildmi,
+        asmparse=asmparse,
+        alias=alias,
+    )
+
+
 def _gen_sdnodexform(imm, signed_lower=False):
     if signed_lower:
         half = hex(2 ** (imm.offset - 1)) if imm.offset > 0 else 0
@@ -915,6 +1238,10 @@ def estimate_pseudo_call_dag(isa, call_ops):
 
 
 def estimate_pseudo_call_asm(isa, call_ops):
+    for alias in isa.instruction_aliases:
+        if hasattr(alias, "is_call") and alias.is_call:
+            src = re.sub(r"\$\w+", r"$func", alias.src)
+            return src
     call_op = call_ops["call"][0]
     call_op, operands = call_op
     s = call_op.__name__
@@ -2015,6 +2342,16 @@ class LLVMCompiler():
                 instr_alias = 'InstAlias<"{}", {}>'.format(srcstr, dstnode)
                 instr_aliases.append(instr_alias)
 
+        pseudo_instrs = []
+        processed = []
+        for alias in self.isa.instruction_aliases:
+            pseudo = get_pseudo_instr(alias, self.isa, call_exprs, li_ops, processed)
+            if pseudo:
+                pseudo.asmparse = [line.format(Xpu=self.namespace) for line in pseudo.asmparse]
+                pseudo.buildmi = [line.format(Xpu=self.namespace) for line in pseudo.buildmi]
+                pseudo_instrs.append(pseudo)
+            processed.append(alias)
+
         # llvm/lib/Target/Xpu/MCTargetDesc/XpuMCCodeEmitter.cpp
         _codes = estimate_mc_expand_longcall_codes(self.isa, call_ops)
         mc_longcall_codes = []
@@ -2137,6 +2474,9 @@ class LLVMCompiler():
             "asm_other_exprs": other_exprs,
 
             "instr_aliases": instr_aliases,
+            "pseudo_instrs": pseudo_instrs,
+            # "pseudo_pre_ra_instrs": pseudo_pre_ra_instrs,
+            # "pseudo_post_ra_instrs": pseudo_post_ra_instrs,
 
             "mc_longcall_codes": mc_longcall_codes,
             "mc_call_codes": mc_call_codes,
@@ -2217,6 +2557,7 @@ class LLVMCompiler():
             "llvm/lib/Target/{Xpu}/{Xpu}ISelLowering.h",
             "llvm/lib/Target/{Xpu}/{Xpu}ISelDAGToDAG.cpp",
             "llvm/lib/Target/{Xpu}/{Xpu}ISelDAGToDAG.h",
+            "llvm/lib/Target/{Xpu}/{Xpu}ExpandPseudoInsts.cpp",
             "llvm/lib/Target/{Xpu}/{Xpu}MachineFunctionInfo.cpp",
             "llvm/lib/Target/{Xpu}/{Xpu}MachineFunctionInfo.h",
             "llvm/lib/Target/{Xpu}/{Xpu}Schedule.td",
