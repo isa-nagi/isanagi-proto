@@ -69,13 +69,9 @@ riscvxpu
 コンパイルコマンド：
 
 ```
-./riscvxpu/sdk/bin/clang helloworld.c \
-  -nostartfiles \
-  -I./riscvxpu/sdk/picolibc/include/ \
-  -L./riscvxpu/sdk/picolibc/lib/ \
-  -lcrt0-hosted -ldummyhost \
-  -T ./riscvxpu/sdk/picolibc/lib/picolibc.ld \
-  -D__IEEE_LITTLE_ENDIAN 
+./riscvxpu/sdk/bin/clang
+  -Oz \
+  -lsemihost \
+  -T picolibc.ld \
+  helloworld.c
 ```
-
-※現在 picolibc のSDKへの組み込みが試験段階のため、上記のようなオプションを追加する必要があります。
