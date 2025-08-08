@@ -1,40 +1,46 @@
 from isana.isa import InstructionAlias, PseudoInstruction
 
 
+# for medlow code model
+#   lui  rd, %hi(symbol)
+#   addi rd, %lo(symbol)
+# for medany code model
+#   label: auipc rd, %pcrel_hi(symbol)
+#          addi  rd, %pcrel_lo(label)(rd)
 instruction_aliases = [
-    PseudoInstruction("la $rd, $symbol", ["auipc $rd, %pcrel_hi($symbol)",  # for non-PIC
-                                          "addi $rd, $rd, %pcrel_lo($symbol)"],
+    PseudoInstruction("la $rd, $symbol", ["lui $rd, %hi($symbol)",  # for non-PIC
+                                          "addi $rd, $rd, %lo($symbol)"],
                       is_load_address=True),
-    # PseudoInstruction("la $rd, $symbol", ["auipc $rd, %pcrel_hi($symbol)",  # for PIC
-    #                                       "lw $rd, %pcrel_lo($symbol) ($rd)"],
+    # PseudoInstruction("la $rd, $symbol", ["lui $rd, %hi($symbol)",  # for PIC
+    #                                       "lw $rd, %lo($symbol) ($rd)"],
     #                   is_load_address=True),
-    PseudoInstruction("lla $rd, $symbol", ["auipc $rd, %pcrel_hi($symbol)",
-                                           "addi $rd, $rd, %pcrel_lo($symbol)"],
+    PseudoInstruction("lla $rd, $symbol", ["lui $rd, %hi($symbol)",
+                                           "addi $rd, $rd, %lo($symbol)"],
                       is_load_address=True),
-    PseudoInstruction("lb $rd, $symbol", ["auipc $rd, %pcrel_hi($symbol)",
-                                          "lb $rd, %pcrel_lo($symbol) ($rd)"]),
-    PseudoInstruction("lh $rd, $symbol", ["auipc $rd, %pcrel_hi($symbol)",
-                                          "lh $rd, %pcrel_lo($symbol) ($rd)"]),
-    PseudoInstruction("lw $rd, $symbol", ["auipc $rd, %pcrel_hi($symbol)",
-                                          "lw $rd, %pcrel_lo($symbol) ($rd)"]),
-    PseudoInstruction("ld $rd, $symbol", ["auipc $rd, %pcrel_hi($symbol)",
-                                          "ld $rd, %pcrel_lo($symbol) ($rd)"]),
-    PseudoInstruction("sb $rd, $symbol, $rt", ["auipc $rd, %pcrel_hi($symbol)",
-                                               "sb $rd, %pcrel_lo($symbol) ($rt)"]),
-    PseudoInstruction("sh $rd, $symbol, $rt", ["auipc $rd, %pcrel_hi($symbol)",
-                                               "sh $rd, %pcrel_lo($symbol) ($rt)"]),
-    PseudoInstruction("sw $rd, $symbol, $rt", ["auipc $rd, %pcrel_hi($symbol)",
-                                               "sw $rd, %pcrel_lo($symbol) ($rt)"]),
-    PseudoInstruction("sd $rd, $symbol, $rt", ["auipc $rd, %pcrel_hi($symbol)",
-                                               "sd $rd, %pcrel_lo($symbol) ($rt)"]),
-    PseudoInstruction("flw $rd, $symbol, $rt", ["auipc $rd, %pcrel_hi($symbol)",
-                                                "flw $rd, %pcrel_lo($symbol) ($rt)"]),
-    PseudoInstruction("fld $rd, $symbol, $rt", ["auipc $rd, %pcrel_hi($symbol)",
-                                                "fld $rd, %pcrel_lo($symbol) ($rt)"]),
-    PseudoInstruction("fsw $rd, $symbol, $rt", ["auipc $rd, %pcrel_hi($symbol)",
-                                                "fsw $rd, %pcrel_lo($symbol) ($rt)"]),
-    PseudoInstruction("fsd $rd, $symbol, $rt", ["auipc $rd, %pcrel_hi($symbol)",
-                                                "fsd $rd, %pcrel_lo($symbol) ($rt)"]),
+    PseudoInstruction("lb $rd, $symbol", ["lui $rd, %hi($symbol)",
+                                          "lb $rd, %lo($symbol) ($rd)"]),
+    PseudoInstruction("lh $rd, $symbol", ["lui $rd, %hi($symbol)",
+                                          "lh $rd, %lo($symbol) ($rd)"]),
+    PseudoInstruction("lw $rd, $symbol", ["lui $rd, %hi($symbol)",
+                                          "lw $rd, %lo($symbol) ($rd)"]),
+    # PseudoInstruction("ld $rd, $symbol", ["lui $rd, %hi($symbol)",
+    #                                       "ld $rd, %lo($symbol) ($rd)"]),
+    PseudoInstruction("sb $rd, $symbol, $rt", ["lui $rd, %hi($symbol)",
+                                               "sb $rd, %lo($symbol) ($rt)"]),
+    PseudoInstruction("sh $rd, $symbol, $rt", ["lui $rd, %hi($symbol)",
+                                               "sh $rd, %lo($symbol) ($rt)"]),
+    PseudoInstruction("sw $rd, $symbol, $rt", ["lui $rd, %hi($symbol)",
+                                               "sw $rd, %lo($symbol) ($rt)"]),
+    # PseudoInstruction("sd $rd, $symbol, $rt", ["lui $rd, %hi($symbol)",
+    #                                            "sd $rd, %lo($symbol) ($rt)"]),
+    PseudoInstruction("flw $rd, $symbol, $rt", ["lui $rd, %hi($symbol)",
+                                                "flw $rd, %lo($symbol) ($rt)"]),
+    # PseudoInstruction("fld $rd, $symbol, $rt", ["lui $rd, %hi($symbol)",
+    #                                             "fld $rd, %lo($symbol) ($rt)"]),
+    PseudoInstruction("fsw $rd, $symbol, $rt", ["lui $rd, %hi($symbol)",
+                                                "fsw $rd, %lo($symbol) ($rt)"]),
+    # PseudoInstruction("fsd $rd, $symbol, $rt", ["lui $rd, %hi($symbol)",
+    #                                             "fsd $rd, %lo($symbol) ($rt)"]),
 
     InstructionAlias("nop", ["addi x0, x0, 0"]),
     PseudoInstruction("li $rd, $imm", ["lui $rd, $imm",
