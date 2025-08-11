@@ -588,6 +588,26 @@ def extract_lui_addi_value_code(lui_imm, addi_imm, valname):
     return (lui_code, addi_code)
 
 
+def get_imm_cond(imm, valname):
+    if hasattr(imm, "signed"):
+        cond = "!({val} & {mask}) && ({minv} <= ({val}>>{shift})) && (({val}>>{shift}) <= {maxv})".format(
+            val=valname,
+            mask=2 ** imm.offset - 1,
+            shift=imm.offset,
+            minv=-2 ** (imm.width - 1),
+            maxv=2 ** (imm.width - 1) - 1,
+        )
+    else:
+        cond = "!({val} & {mask}) && ({minv} <= ({val}>>{shift})) && (({val}>>{shift}) <= {maxv})".format(
+            val=valname,
+            mask=2 ** imm.offset - 1,
+            shift=imm.offset,
+            minv=0,
+            maxv=2 ** imm.width - 1,
+        )
+    return cond
+
+
 def get_pseudo_instr(alias, isa, call_exprs, li_ops, processed_pseudos):
     if isinstance(alias, InstructionAlias):
         return None
@@ -1360,15 +1380,6 @@ def estimate_mc_expand_call_codes(isa, call_ops):
 
 
 def estimate_add_immediate_codes(isa, li_ops):
-    def get_cond(imm):
-        cond = "!(Amount & {mask}) && ({minv} <= (Amount>>{shift})) && ((Amount>>{shift}) <= {maxv})".format(
-            mask=int(pow(2, imm.offset) - 1),
-            shift=imm.offset,
-            minv=-int(pow(2, imm.width)),
-            maxv=int(pow(2, imm.width) - 1),
-        )
-        return cond
-
     (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
     codes = list()
     for ops in li_s + lui_s + addi_s + lui_addi_s:
@@ -1384,23 +1395,8 @@ def estimate_add_immediate_codes(isa, li_ops):
             vardefs.append(vardef)
             vardef = "Register ImmReg = MRI.createVirtualRegister(&{Xpu}::GPRRegClass);"
             vardefs.append(vardef)
-            if hasattr(addi_imm, "signed"):
-                s = "((Amount + {half}) >> {shift}) & {mask}".format(
-                    half=2 ** (lui_imm.offset - 1),
-                    shift=lui_imm.offset,
-                    mask=2 ** lui_imm.width - 1,
-                )
-            else:
-                s = "((Amount >> {shift})) & {mask}".format(
-                    shift=lui_imm.offset,
-                    mask=2 ** lui_imm.width - 1,
-                )
-            if hasattr(lui_imm, "signed"):
-                s = "SignExtend64<{width}>({s})".format(
-                    width=lui_imm.width,
-                    s=s,
-                )
-            vardef = "int64_t Hi = {};".format(s)
+            lui_code, addi_code = extract_lui_addi_value_code(lui_imm, addi_imm, "Amount")
+            vardef = "int64_t Hi = {};".format(lui_code)
             vardefs.append(vardef)
             buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{lui_opname}), TempReg)"
             for param in lui_op.params.inputs.values():
@@ -1410,11 +1406,7 @@ def estimate_add_immediate_codes(isa, li_ops):
                     buildmi += f"/*{param} {param.type_}*/ "
             buildmi += ";"
             buildmis.append(buildmi)
-            # addi
-            s = "Amount & {mask}".format(mask=2 ** addi_imm.width - 1)
-            if hasattr(addi_imm, "signed"):
-                s = "SignExtend64<{width}>({s})".format(width=addi_imm.width, s=s)
-            vardef = "int64_t Lo = {};".format(s)
+            vardef = "int64_t Lo = {};".format(addi_code)
             vardefs.append(vardef)
             buildmi = f"BuildMI(MBB, MBBI, DL, get({{Xpu}}::{addi_opname}), ImmReg)"
             for param in addi_op.params.inputs.values():
@@ -1437,7 +1429,7 @@ def estimate_add_immediate_codes(isa, li_ops):
             codes.append((cond, vardefs, buildmis))
         elif ops in li_s or ops in lui_s:
             op, imm = ops
-            cond = get_cond(imm)
+            cond = get_imm_cond(imm, "Amount")
             cond = f"if (/*{imm.label}*/ {cond})"
             if len(codes) > 0:
                 cond = "else " + cond
@@ -1478,7 +1470,7 @@ def estimate_add_immediate_codes(isa, li_ops):
             codes.append((cond, vardefs, buildmis))
         else:
             op, imm = ops
-            cond = get_cond(imm)
+            cond = get_imm_cond(imm, "Amount")
             cond = f"if (/*{imm.label}*/ {cond})"
             if len(codes) > 0:
                 cond = "else " + cond
@@ -1500,15 +1492,6 @@ def estimate_add_immediate_codes(isa, li_ops):
 
 
 def estimate_selectaddr_codes(isa, li_ops, has_addr):
-    def get_cond(imm):
-        cond = "!(CVal & {mask}) && ({minv} <= (CVal>>{shift})) && ((CVal>>{shift}) <= {maxv})".format(
-            mask=int(pow(2, imm.offset) - 1),
-            shift=imm.offset,
-            minv=-int(pow(2, imm.width)),
-            maxv=int(pow(2, imm.width) - 1),
-        )
-        return cond
-
     (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
     codes = list()
     for ops in addi_s + lui_addi_s:
@@ -1518,28 +1501,10 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
             lui_op, lui_imm = ops[0]
             addi_op, addi_imm = ops[1]
             cond = "else"
-            if hasattr(addi_imm, "signed"):
-                s = "((CVal + {half}) >> {shift}) & {mask}".format(
-                    half=2 ** (lui_imm.offset - 1),
-                    shift=lui_imm.offset,
-                    mask=2 ** lui_imm.width - 1,
-                )
-            else:
-                s = "((CVal >> {shift})) & {mask}".format(
-                    shift=lui_imm.offset,
-                    mask=2 ** lui_imm.width - 1,
-                )
-            if hasattr(lui_imm, "signed"):
-                s = "SignExtend64<{width}>({s})".format(
-                    width=lui_imm.width,
-                    s=s,
-                )
-            vardef = "int64_t Hi = {};".format(s)
+            lui_code, addi_code = extract_lui_addi_value_code(lui_imm, addi_imm, "CVal")
+            vardef = "int64_t Hi = {};".format(lui_code)
             vardefs.append(vardef)
-            s = "CVal & {mask}".format(mask=2 ** addi_imm.width - 1)
-            if hasattr(addi_imm, "signed"):
-                s = "SignExtend64<{width}>({s})".format(width=addi_imm.width, s=s)
-            vardef = "int64_t Lo = {};".format(s)
+            vardef = "int64_t Lo = {};".format(addi_code)
             vardefs.append(vardef)
             sdvalue = ("auto Lui = SDValue(CurDAG->getMachineNode({Xpu}::LUI, DL, VT, "
                        "CurDAG->getTargetConstant(Hi, DL, VT)), 0);")
@@ -1556,7 +1521,7 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
             codes.append((cond, vardefs, sdvalues))
         else:
             op, imm = ops
-            cond = get_cond(imm)
+            cond = get_imm_cond(imm, "CVal")
             cond = f"if (/*{imm.label}*/ {cond})"
             if len(codes) > 0:
                 cond = "else " + cond
@@ -1698,17 +1663,6 @@ def estimate_emit_frameindex_codes(isa, li_ops, load_ops, store_ops):
 
     # return (load_maps, store_maps, load_buildmi, store_buildmi)
 
-    valname = "NewOffset"
-    def get_cond(imm):
-        cond = "!({val} & {mask}) && ({minv} <= ({val}>>{shift})) && (({val}>>{shift}) <= {maxv})".format(
-            val=valname,
-            mask=int(pow(2, imm.offset) - 1),
-            shift=imm.offset,
-            minv=-int(pow(2, imm.width)),
-            maxv=int(pow(2, imm.width) - 1),
-        )
-        return cond
-
     # before:
     #   PseudoFI_ld/st val, fiaddr, fioff
     # aftter (small offset):
@@ -1737,30 +1691,10 @@ def estimate_emit_frameindex_codes(isa, li_ops, load_ops, store_ops):
     fi_add_op, _ = add_s[0]
 
     vardefs = []
-    if hasattr(fi_addi_imm, "signed"):
-        s = "(({val} + {half}) >> {shift}) & {mask}".format(
-            val=valname,
-            half=2 ** (fi_lui_imm.offset - 1),
-            shift=fi_lui_imm.offset,
-            mask=2 ** fi_lui_imm.width - 1,
-        )
-    else:
-        s = "(({val} >> {shift})) & {mask}".format(
-            val=valname,
-            shift=fi_lui_imm.offset,
-            mask=2 ** fi_lui_imm.width - 1,
-        )
-    if hasattr(fi_lui_imm, "signed"):
-        s = "SignExtend64<{width}>({s})".format(
-            width=fi_lui_imm.width,
-            s=s,
-        )
-    vardef = "int64_t NewHi = {};".format(s)
+    lui_code, addi_code = extract_lui_addi_value_code(fi_lui_imm, fi_addi_imm, "NewOffset")
+    vardef = "int64_t NewHi = {};".format(lui_code)
     vardefs.append(vardef)
-    s = "{val} & {mask}".format(val=valname, mask=2 ** fi_addi_imm.width - 1)
-    if hasattr(fi_addi_imm, "signed"):
-        s = "SignExtend64<{width}>({s})".format(width=fi_addi_imm.width, s=s)
-    vardef = "int64_t NewLo = {};".format(s)
+    vardef = "int64_t NewLo = {};".format(addi_code)
     vardefs.append(vardef)
 
     buildmis = []
@@ -2067,12 +2001,7 @@ class LLVMCompiler():
                 operand_cls.imm_leaf = None
             else:
                 operand_cls.asm_operand_cls = None
-                cond = "return !(Imm & {mask}) && ({minv} <= (Imm>>{shift})) && ((Imm>>{shift}) <= {maxv});".format(
-                    mask=int(pow(2, imm.offset) - 1),
-                    shift=imm.offset,
-                    minv=-int(pow(2, imm.width)),
-                    maxv=int(pow(2, imm.width) - 1),
-                )
+                cond = "return {};".format(get_imm_cond(imm, "Imm"))
                 operand_cls.imm_leaf = OperandType(
                     varname=imm.label + "Tp",
                     basecls="i32",
