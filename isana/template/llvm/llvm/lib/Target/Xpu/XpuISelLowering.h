@@ -69,6 +69,7 @@ private:
   SDValue lowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerSELECT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVAARG(SDValue Op, SelectionDAG &DAG) const;
 };
 }
 

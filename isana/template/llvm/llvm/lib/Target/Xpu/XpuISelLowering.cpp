@@ -60,7 +60,7 @@ using namespace llvm;
   setOperationAction(ISD::SELECT_CC, XLenVT, Expand);
 
   setOperationAction(ISD::VASTART,   MVT::Other, Custom);
-  setOperationAction(ISD::VAARG,     MVT::Other, Expand);
+  setOperationAction(ISD::VAARG,     MVT::Other, Custom);  // TODO: this is work-around. stack alignment for 'double' should be fixed.
   setOperationAction(ISD::VACOPY,    MVT::Other, Expand);
   setOperationAction(ISD::VAEND,     MVT::Other, Expand);
 
@@ -424,6 +424,8 @@ SDValue
     return lowerSELECT(Op, DAG);
   case ISD::VASTART:
     return lowerVASTART(Op, DAG);
+  case ISD::VAARG:
+    return lowerVAARG(Op, DAG);
   }
 }
 
@@ -556,6 +558,57 @@ SDValue
   const Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
   return DAG.getStore(Op.getOperand(0), DL, FI, Op.getOperand(1),
                       MachinePointerInfo(SV));
+}
+
+// TODO: this is work-around. stack alignment for 'double' should be fixed.
+SDValue
+{{ Xpu }}TargetLowering::lowerVAARG(
+  SDValue Op, SelectionDAG &DAG
+) const {
+  SDNode *Node = Op.getNode();
+  EVT VT = Node->getValueType(0);
+  SDValue Chain = Node->getOperand(0);
+  SDValue VAListPtr = Node->getOperand(1);
+  const Align Align =
+      llvm::MaybeAlign(Node->getConstantOperandVal(3)).valueOrOne();
+  const Value *SV = cast<SrcValueSDNode>(Node->getOperand(2))->getValue();
+  SDLoc DL(Node);
+  unsigned ArgSlotSizeInBytes = Subtarget.getXLen() / 8;
+  auto &TD = DAG.getDataLayout();
+  unsigned ArgSizeInBytes = TD.getTypeAllocSize(VT.getTypeForEVT(*DAG.getContext()));
+
+  SDValue VAListLoad = DAG.getLoad(getPointerTy(DAG.getDataLayout()), DL, Chain,
+                                   VAListPtr, MachinePointerInfo(SV));
+  SDValue VAList = VAListLoad;
+
+  // Re-align the pointer if necessary.
+  // if (Align > getMinStackArgumentAlignment()) {
+  //   VAList = DAG.getNode(
+  //       ISD::ADD, DL, VAList.getValueType(), VAList,
+  //       DAG.getConstant(Align.value() - 1, DL, VAList.getValueType()));
+  // 
+  //   VAList = DAG.getNode(
+  //       ISD::AND, DL, VAList.getValueType(), VAList,
+  //       DAG.getConstant(-(int64_t)Align.value(), DL, VAList.getValueType()));
+  // }
+
+  // Increment the pointer, VAList, to the next vaarg.
+  SDValue Tmp3 =
+      DAG.getNode(ISD::ADD, DL, VAList.getValueType(), VAList,
+                  DAG.getConstant(alignTo(ArgSizeInBytes, ArgSlotSizeInBytes),
+                                  DL, VAList.getValueType()));
+  // Store the incremented VAList to the legalized pointer
+  Chain = DAG.getStore(VAListLoad.getValue(1), DL, Tmp3, VAListPtr,
+                       MachinePointerInfo(SV));
+
+  // if (Subtarget.isBigEndian() && ArgSizeInBytes < ArgSlotSizeInBytes) {
+  //   unsigned Adjustment = ArgSlotSizeInBytes - ArgSizeInBytes;
+  //   VAList = DAG.getNode(ISD::ADD, DL, VAListPtr.getValueType(), VAList,
+  //                        DAG.getIntPtrConstant(Adjustment, DL));
+  // }
+
+  // Load the actual argument out of the pointer VAList
+  return DAG.getLoad(VT, DL, Chain, VAList, MachinePointerInfo());
 }
 
 const char *
