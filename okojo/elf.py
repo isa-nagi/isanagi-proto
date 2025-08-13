@@ -155,6 +155,17 @@ class ElfObject():
     def sts(self):
         return self.symbol_tables
 
+    @classmethod
+    def is_elf(cls, f):
+        if isinstance(f, str):
+            f = open(f, 'rb')
+        f.seek(0)
+        buf = f.read(4)
+        if buf != b'\x7fELF':
+            return False
+        f.seek(0)
+        return True
+
     def read_all(self):
         self.read_elf_header()
         self.read_program_headers()
