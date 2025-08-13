@@ -6,6 +6,7 @@ import sys
 from isana.semantic import (
     may_change_pc_absolute,
     may_change_pc_relative,
+    resolve_unknown_variable,
 )
 
 
@@ -106,6 +107,7 @@ class ISA():
                 self.unknown_instructions.append(instr)
             else:
                 self.instructions.append(instr)
+        self._abi = kwargs.pop('abi')
         self._compiler = kwargs.pop('compiler', None)
         self.context = kwargs.pop('context')
         self._ctx = None
@@ -117,8 +119,15 @@ class ISA():
         self._autofill_instructions_attribute()
         self._make_instruction_tree()
         self._make_decoder()
+        if (type(self._abi) is type(object)):
+            self._abi = self._abi(self)
+        self._abi.autofill_info()
         if (type(self._compiler) is type(object)):
             self._compiler = self._compiler(self)
+
+    @property
+    def abi(self):
+        return self._abi
 
     @property
     def compiler(self):
@@ -265,11 +274,22 @@ class ISA():
     def _autofill_instructions_attribute(self):
         for instr in self.instructions:
             instr._new_param_attribute(instr, self)
+        for instr in self.instructions:
             if m := may_change_pc_absolute(instr):
-                expr = m
-                expr = re.sub(r'ins\.(\w+)', r'self.params.inputs["\1"]', expr)
-                # print("A", f'"{m}"', f'"{expr}"', instr)
-                # [TODO] implement target_addr() for pc-absolute
+                import ast
+                tgtast = ast.parse(m)
+                tgtast = resolve_unknown_variable(tgtast, instr.semantic)
+                expr_orig = ast.unparse(tgtast)
+                expr = re.sub(r'ctx.\S+', r'0', expr_orig)
+                expr = re.sub(r'ins\.(\w+)', r'self.params.inputs["\1"].value', expr)
+                # print("A", f'"{expr_orig}"', f'"{expr}"', instr)
+                # [NOTE] target_addr() for pc-absolute is dummy implementation because
+                # register value is unresolvable until execute
+                def new_target_addr(expr):
+                    def target_addr(self):
+                        return eval(expr)
+                    return target_addr
+                instr.target_addr = new_target_addr(expr)
             elif m := may_change_pc_relative(instr):
                 expr = m
                 expr = re.sub(r'ins\.(\w+)', r'self.params.inputs["\1"].value', expr)
@@ -458,11 +478,14 @@ class Context():
 class RegisterGroup():
     def __init__(self, label: str, **kwargs):
         self.label = label
-        self.width = kwargs.get('width')
-        self.regs = copy.deepcopy(kwargs.get('regs'))
+        self.width = kwargs.pop('width')
+        self.regs = copy.deepcopy(kwargs.pop('regs'))
         for i, reg in enumerate(self.regs):
             reg.group = self
             reg.idx = i
+        self.is_gpr = kwargs.pop('gpr', False)
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
     def __getitem__(self, key):
         if isinstance(key, int):
@@ -520,6 +543,7 @@ class Register():
         self.is_stack_pointer = kwargs.get('sp', False)
         self.is_frame_pointer = kwargs.get('fp', False)
         self.is_global_pointer = kwargs.get('gp', False)
+        self.is_thread_local_pointer = kwargs.get('tp', False)
         self.is_pc = kwargs.get('pc', False)
         self.idx = kwargs.get('idx', number)
         self.dwarf_number = kwargs.get('dwarf', number)
@@ -723,7 +747,7 @@ class Instruction():
     def target_addr(self):
         # jump/branch/call/tail target address
         # TODO: generate from semantic
-        raise NotImplementedError()
+        raise NotImplementedError(f"{self.__class__.__name__}")
 
     def value_swap_endian(self, value: bytes, endian: str):
         if not self.bin:

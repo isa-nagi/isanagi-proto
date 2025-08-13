@@ -52,7 +52,7 @@ GPR_regs = (
 
 GPR = RegisterGroup("GPR", width=xlen, regs=(
     GPR_regs[:]
-))
+), is_gpr=True)
 
 GPRC = RegisterGroup("GPRC", width=xlen, regs=(
     GPR_regs[8:16]

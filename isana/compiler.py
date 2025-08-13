@@ -8,21 +8,13 @@ from isana.semantic import (
     may_use_pc_relative,
     may_take_memory_address,
     get_alu_dag,
-    estimate_jump_ops,
-    estimate_call_ops,
-    estimate_ret_ops,
-    estimate_load_immediate_ops,
     is_lui_like,
-    estimate_compare_branch_ops,
-    estimate_branch_ops,
-    estimate_setcc_ops,
-    estimate_load_ops,
-    estimate_store_ops,
 )
 from isana.isa import (
     Immediate,
     InstructionAlias, PseudoInstruction,
 )
+from isana.abi import Relocation
 
 
 _default_target = "Xpu"
@@ -154,10 +146,11 @@ instr_attr_table = {
 }
 
 
-class Fixup(KwargsClass):
+class Fixup(Relocation):
     keys = (
         'target',
         'number',
+        'name',
         'name_enum',
         'addend',
         'bin',
@@ -185,10 +178,6 @@ class Fixup(KwargsClass):
         self.reloc_procs = list()
         self.val_carryed = str()
         super().__init__(**kwargs)
-
-
-class Relocation(Fixup):
-    pass
 
 
 class AsmExpr(KwargsClass):
@@ -906,12 +895,7 @@ def _gen_sdnodexform(imm, signed_lower=False):
 
 def estimate_load_immediate_dag(isa, li_ops):
     (li32_s, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
-    zeroreg = None
-    for group in isa.registers:
-        for reg in group.regs:
-            if reg.is_zero:
-                zeroreg = reg
-                break
+    zeroreg = isa.abi.zero_reg
     immxs = []
     dags = []
     imm32 = None
@@ -1532,7 +1516,7 @@ def estimate_selectaddr_codes(isa, li_ops, has_addr):
                 sdvalue = "Offset = CurDAG->getTargetConstant(CVal, DL, VT);"
                 sdvalues.append(sdvalue)
             else:  # (imm) -> (zero, imm)
-                sdvalue = "Base = CurDAG->getRegister({Xpu}::{REG0}, VT);"
+                sdvalue = "Base = CurDAG->getRegister({Xpu}::{ZERO_REG}, VT);"
                 sdvalues.append(sdvalue)
                 sdvalue = "Offset = CurDAG->getTargetConstant(CVal, DL, VT);"
                 sdvalues.append(sdvalue)
@@ -1820,14 +1804,22 @@ def estimate_long_br_codes(isa, br_ops, jump_ops, zeroreg, fixups):
 class LLVMCompiler():
     target = _default_target
     triple = tuple(_default_triple)
-    relocations = tuple()
 
     def __init__(self, isa):
         self.isa = isa
         self.outdir = "out"
         self.fixups = list()
-        if self.relocations:
-            self.fixups = list(self.relocations)
+        if self.isa.abi.relocations:
+            for reloc in self.isa.abi.relocations:
+                fixup = Fixup()
+                for key in fixup.keys:
+                    if key not in ('target', 'name_enum'):
+                        setattr(fixup, key, getattr(reloc, key))
+                if hasattr(reloc, 'instrs'):
+                    fixup.instrs = reloc.instrs
+                if hasattr(reloc, 'expr'):
+                    fixup.expr = reloc.expr
+                self.fixups.append(fixup)
         self._prepare_processorinfo()
 
     @property
@@ -1927,38 +1919,17 @@ class LLVMCompiler():
                 bitsize=int(len(reggroup.regs) - 1).bit_length(),
             ))
 
-        reserved_regs = []
-        gpr = next(filter(lambda rg: rg.label == "GPR", self.isa.registers), None)
-        reg0 = None
-        sp = None
-        fp = None
-        ra = None
-        arg_regs = []
-        ret_regs = []
-        callee_saved_regs = []
-        if gpr:
-            for reg in gpr.regs:
-                if any([
-                    reg.is_zero, reg.is_return_address, reg.is_stack_pointer, reg.is_global_pointer,
-                ]):
-                    reserved_regs.append(reg.label.upper())
-                if reg0 is None and (reg.is_zero):
-                    reg0 = reg.label.upper()
-                if sp is None and (reg.is_stack_pointer):
-                    sp = reg.label.upper()
-                if fp is None and (reg.is_frame_pointer):
-                    fp = reg.label.upper()
-                if ra is None and (reg.is_return_address):
-                    ra = reg.label.upper()
-            regs = list(filter(lambda r: r.is_arg, gpr.regs))
-            # arg_regs = ', '.join(["{}::{}".format(self.namespace, r.label.upper()) for r in regs])
-            # arg_regs = ', '.join([r.label.upper() for r in regs])
-            arg_regs = [r.label.upper() for r in regs]
-            regs = list(filter(lambda r: r.is_ret, gpr.regs))
-            ret_regs = [r.label.upper() for r in regs]
-            ret_reg_numbers = [r.number for r in regs]
-            regs = list(filter(lambda r: r.is_callee_saved, gpr.regs))
-            callee_saved_regs = [r.label.upper() for r in regs]
+        gpr = self.isa.abi.gpr
+        zero_reg = self.isa.abi.zero_reg.label.upper()
+        ra = self.isa.abi.ra_reg.label.upper()
+        sp = self.isa.abi.sp_reg.label.upper()
+        fp = self.isa.abi.fp_reg.label.upper()
+        gp = self.isa.abi.gp_reg.label.upper()
+        reserved_regs = [zero_reg, ra, sp, gp]
+        arg_regs = [reg.label.upper() for reg in self.isa.abi.arg_regs]
+        ret_regs = [reg.label.upper() for reg in self.isa.abi.ret_regs]
+        ret_reg_numbers = [reg.number for reg in self.isa.abi.ret_regs]
+        callee_saved_regs = [reg.label.upper() for reg in self.isa.abi.callee_saved_regs]
 
         kwargs = {
             "reg_bases": reg_bases,
@@ -1966,7 +1937,7 @@ class LLVMCompiler():
             "regcls_defs": regcls_defs,
             "reserved_regs": reserved_regs,
             "gpr": gpr,
-            "REG0": reg0,
+            "ZERO_REG": zero_reg,
             "SP": sp,
             "FP": fp,
             "RA": ra,
@@ -1980,7 +1951,7 @@ class LLVMCompiler():
         return kwargs
 
     def _prepare_instrinfo(self):
-        reg0 = self.kwargs['REG0']
+        zero_reg = self.kwargs['ZERO_REG']
 
         # -- InstrInfo.td --
         asm_operand_clss = []
@@ -2178,16 +2149,16 @@ class LLVMCompiler():
 
             instr_defs.append(instr_def)
 
-        # gen pc manipulation ops
-        jump_ops = estimate_jump_ops(self.isa)
-        call_ops = estimate_call_ops(self.isa)
-        ret_ops = estimate_ret_ops(self.isa)
-
-        load_ops = estimate_load_ops(self.isa)
-        store_ops = estimate_store_ops(self.isa)
-
-        # prepare load immediate
-        li_ops = estimate_load_immediate_ops(self.isa)
+        # get special ops
+        call_ops = self.isa.abi.call_ops
+        ret_ops = self.isa.abi.ret_ops
+        jump_ops = self.isa.abi.jump_ops
+        cmp_ops = self.isa.abi.cmp_ops
+        br_ops = self.isa.abi.br_ops
+        setcc_ops = self.isa.abi.setcc_ops
+        load_ops = self.isa.abi.load_ops
+        store_ops = self.isa.abi.store_ops
+        li_ops = self.isa.abi.li_ops
 
         # gen load immediate
         xforms, dags = estimate_load_immediate_dag(self.isa, li_ops)
@@ -2199,10 +2170,7 @@ class LLVMCompiler():
         instr_bitsizes = list(set([ins().bitsize for ins in self.isa.instructions]))
 
         # gen branchs
-        cmp_ops = estimate_compare_branch_ops(self.isa)
-        br_ops = estimate_branch_ops(self.isa)
-        setcc_ops = estimate_setcc_ops(self.isa)
-        dags = estimate_branch_dag(self.isa, cmp_ops, br_ops, setcc_ops, reg0)
+        dags = estimate_branch_dag(self.isa, cmp_ops, br_ops, setcc_ops, zero_reg)
         br_dags = dags
 
         # gen load/store
@@ -2303,7 +2271,7 @@ class LLVMCompiler():
             addimm_codes.append((cond, vardefs, buildmis))
 
         (li32, li_s, lui_s, addi_s, lui_addi_s, add_s) = li_ops
-        copy_reg_buildmi = estimate_copy_reg_buildmi(self.isa, [], addi_s, add_s, reg0)
+        copy_reg_buildmi = estimate_copy_reg_buildmi(self.isa, [], addi_s, add_s, zero_reg)
         copy_reg_buildmi = copy_reg_buildmi.format(Xpu=self.namespace)
 
         _codes = estimate_opposite_br_codes(self.isa, br_ops)
@@ -2325,7 +2293,7 @@ class LLVMCompiler():
         selectaddr_imm_codes = []
         for cond, vardefs, sdvalues in _codes:
             vardefs = (var.format(Xpu=self.namespace) for var in vardefs)
-            sdvalues = (bmi.format(Xpu=self.namespace, REG0=reg0) for bmi in sdvalues)
+            sdvalues = (bmi.format(Xpu=self.namespace, ZERO_REG=zero_reg) for bmi in sdvalues)
             selectaddr_imm_codes.append((cond, vardefs, sdvalues))
 
         # llvm/lib/Target/Xpu/XpuISelLowering.cpp
@@ -2358,7 +2326,7 @@ class LLVMCompiler():
         frameindex_store_buildmi = [x.format(Xpu=self.namespace) for x in store_buildmi]
 
         # long branch codes
-        codes = estimate_long_br_codes(self.isa, br_ops, jump_ops, reg0, fixups)
+        codes = estimate_long_br_codes(self.isa, br_ops, jump_ops, zero_reg, fixups)
         codes['jump_mcinst'] = codes['jump_mcinst'].format(Xpu=self.namespace)
         codes['jump_fixup'] = codes['jump_fixup'].format(
             Xpu=self.namespace, xpu=self.namespace.lower()

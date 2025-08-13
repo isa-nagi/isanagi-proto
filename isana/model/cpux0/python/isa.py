@@ -6,6 +6,7 @@ from .register import GPR, SR, C0R, SPR
 from .datatype import Imm, ImmS12, ImmS16, ImmU16, ImmS16O16, ImmS24
 from .instruction import instructions
 
+from .abi import abi
 from .compiler import compiler
 
 
@@ -50,6 +51,7 @@ isa = CpuX0ISA(
         ImmS24,
     ),
     instructions=instructions,
+    abi=abi,
     compiler=compiler,
     context=CpuX0Context,
 )

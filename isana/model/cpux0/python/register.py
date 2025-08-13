@@ -31,7 +31,7 @@ GPR_regs = (
 
 GPR = RegisterGroup("GPR", width=32, regs=(
     GPR_regs[:]
-))
+), is_gpr=True)
 
 SR = RegisterGroup("SR", width=32, regs=(
     GPR_regs[15],

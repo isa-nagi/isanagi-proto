@@ -302,6 +302,30 @@ def may_use_pc_relative(instr):
     return None
 
 
+def may_save_pc(instr):
+    def savepc_semantic(self, ctx, ins):
+        PickAny = PickAny + PickAny  # noqa
+
+    semantic = instr.semantic
+    if m := _search_ast(semantic, savepc_semantic):
+        try:
+            regn0 = m.picks[0].slice.attr
+            grpn0 = m.picks[0].value.attr
+            is_gpr0 = grpn0 in [grp.label for grp in instr.isa.registers]
+            regn1 = m.picks[1].attr
+            grpn1 = m.picks[1].value.attr
+            is_pc1 = eval(f'instr.isa._ctx.{grpn1}.get_obj("{regn1}").is_pc')
+            immv2 = m.picks[2].value
+            is_imm2 = isinstance(immv2, int)
+        except Exception:
+            is_gpr0 = False
+            is_pc1 = False
+            is_imm2 = False
+        if is_gpr0 and is_pc1 and is_imm2:
+            return (regn0, grpn0, immv2)
+    return None
+
+
 def may_take_memory_address(semantic):
     code = inspect.getsource(semantic)
     code = dedent(code)
@@ -317,12 +341,8 @@ def may_take_memory_address(semantic):
 
 
 def estimate_jump_ops(isa):
-    zero = None
-    gpr = next(filter(lambda rg: rg.label == "GPR", isa.registers), None)
-    if gpr:
-        for reg in gpr.regs:
-            if zero is None and (reg.is_zero):
-                zero = reg
+    zero = isa.abi.zero_reg
+    # ra = isa.abi.ra_reg
     instrs = []
     for instr in isa.instructions:
         if type(instr.is_jump) is bool and instr.is_jump:
@@ -331,6 +351,10 @@ def estimate_jump_ops(isa):
             elif type(instr.is_indirect) is bool and instr.is_indirect:
                 instrs.append((instr, True))  # jumpind
     for instr in isa.instructions:
+        # if m := may_save_pc(instr):
+        #     print(m)
+        #     continue
+        # print("JUMP?:", instr.__name__)
         if may_change_pc_absolute(instr):
             if (instr, True) not in instrs:
                 instrs.append((instr, True))  # jumpind
@@ -378,15 +402,8 @@ def estimate_jump_ops(isa):
 
 
 def estimate_call_ops(isa):
-    zero = None
-    ra = None
-    gpr = next(filter(lambda rg: rg.label == "GPR", isa.registers), None)
-    if gpr:
-        for reg in gpr.regs:
-            if zero is None and (reg.is_zero):
-                zero = reg
-            if ra is None and (reg.is_return_address):
-                ra = reg
+    zero = isa.abi.zero_reg
+    ra = isa.abi.ra_reg
     instrs = []
     for instr in isa.instructions:
         if type(instr.is_call) is bool and instr.is_call:
@@ -433,6 +450,10 @@ def estimate_call_ops(isa):
             else:
                 pass
     for instr in isa.instructions:
+        if m := may_save_pc(instr):
+            pass
+        else:
+            continue
         if m := may_change_pc_absolute(instr):
             tgtast = ast.parse(m)
             tgtast = resolve_unknown_variable(tgtast, instr.semantic)
@@ -488,15 +509,8 @@ def estimate_call_ops(isa):
 
 
 def estimate_ret_ops(isa):
-    zero = None
-    ra = None
-    gpr = next(filter(lambda rg: rg.label == "GPR", isa.registers), None)
-    if gpr:
-        for reg in gpr.regs:
-            if zero is None and (reg.is_zero):
-                zero = reg
-            if ra is None and (reg.is_return_address):
-                ra = reg
+    zero = isa.abi.zero_reg
+    ra = isa.abi.ra_reg
     instrs = []
     for instr in isa.instructions:
         if type(instr.is_return) is bool and instr.is_return:
@@ -612,8 +626,10 @@ def get_alu_dag(semantic):
             dag_op = {**op_alu_table, **op_cmp_table}[type(op_node)]
     else:
         if dst_semantic == mulh_semantic:
-            if not rhs_r_unsigned:
-                dag_op = "mulhsu"
+            if not rhs_l_unsigned:
+                # dag_op = "mulhu"  # not correct
+                # dag_op = "mulhsu"  # unknown IR operator
+                dag_op = "mulhs"  # not correct
             else:
                 dag_op = "mulhu"
         else:

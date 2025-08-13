@@ -1,5 +1,4 @@
 from isana.compiler import LLVMCompiler
-# from isana.compiler import Relocation
 
 
 class CpuX0Compiler(LLVMCompiler):

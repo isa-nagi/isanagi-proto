@@ -93,7 +93,7 @@ bool {{ Xpu }}AsmPrinter::PrintAsmOperand(
       return true; // Unknown modifier.
     case 'z':      // Print zero register if zero, regular printing otherwise.
       if (MO.isImm() && MO.getImm() == 0) {
-        OS << {{ Xpu }}InstPrinter::getRegisterName({{ Xpu }}::{{ REG0 }});
+        OS << {{ Xpu }}InstPrinter::getRegisterName({{ Xpu }}::{{ ZERO_REG }});
         return false;
       }
       break;

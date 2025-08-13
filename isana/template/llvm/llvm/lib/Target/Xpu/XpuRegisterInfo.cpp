@@ -20,7 +20,7 @@ using namespace llvm;
 #include "{{ Xpu }}GenRegisterInfo.inc"
 
 {{ Xpu }}RegisterInfo::{{ Xpu }}RegisterInfo()
-    : {{ Xpu }}GenRegisterInfo({{ Xpu }}::{{ REG0 }}) {}
+    : {{ Xpu }}GenRegisterInfo({{ Xpu }}::{{ ZERO_REG }}) {}
 
 const MCPhysReg *
 {{ Xpu }}RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {

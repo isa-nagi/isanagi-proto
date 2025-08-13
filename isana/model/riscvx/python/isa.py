@@ -11,6 +11,7 @@ from .datatype import (Imm, ImmS12, ImmS12O1, ImmS20O1, ImmS20O12, ImmS6, ImmS9,
                        RMImm)
 from .instruction import instructions
 
+from .abi import abi
 from .compiler import compiler
 
 
@@ -68,6 +69,7 @@ isa = RiscvXISA(
         RMImm,
     ),
     instructions=tuple(instructions),
+    abi=abi,
     compiler=compiler,
     context=RiscvXContext,
 )

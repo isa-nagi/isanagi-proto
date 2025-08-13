@@ -107,7 +107,7 @@ class c_jal(InstrCJ):
     prm = parameter("", "imm:ImmS11O1")
     bin = binary("$opc[15:13], $imm[11], $imm[4], $imm[9:8], $imm[10], "
                  "$imm[6], $imm[7], $imm[3:1], $imm[5], $opc[1:0]")
-    is_call = True
+    # is_call = True
 
     def semantic(self, ctx, ins):
         ctx.GPR[1] = ctx.PCR.pc + 4
@@ -187,7 +187,7 @@ class c_j(InstrCJ):
     prm = parameter("", "imm:ImmS11O1")
     bin = binary("$opc[15:13], $imm[11], $imm[4], $imm[9:8], $imm[10], "
                  "$imm[6], $imm[7], $imm[3:1], $imm[5], $opc[1:0]")
-    is_jump = True
+    # is_jump = True
 
     def semantic(self, ctx, ins):
         ctx.PCR.pc += ins.imm
@@ -290,7 +290,7 @@ class c_ebreak(InstrCREbreak):
 
 class c_jalr(InstrCRJ):
     opn, opc = "c.jalr", 0b1001_00000_00000_10
-    is_call = True
+    # is_call = True
     is_indirect = True
 
     def semantic(self, ctx, ins):
