@@ -12,6 +12,8 @@ def add_subparser_sdk(subparsers):
                         help='set isa model directory')
     parser.add_argument('--generator', metavar='NAME', default="Unix Makefiles",
                         help='set cmake generator')
+    parser.add_argument('-j', '--jobs', metavar='NUM', default=None, type=int,
+                        help='set number of jobs during build')
     parser.add_argument('--install-prefix', metavar='PREFIX', default="install",
                         help='set install directory')
     parser.add_argument('--llvm-project-dir', metavar='DIR', default="llvm-project",
@@ -28,6 +30,8 @@ def add_subparser_sdk_compiler(subparsers):
                         help='set isa model directory')
     parser.add_argument('--generator', metavar='NAME', default="Unix Makefiles",
                         help='set cmake generator')
+    parser.add_argument('-j', '--jobs', metavar='NUM', default=None, type=int,
+                        help='set number of jobs during build')
     parser.add_argument('--install-prefix', metavar='PREFIX', default="install",
                         help='set install directory')
     parser.add_argument('--llvm-project-dir', metavar='DIR', default="llvm-project",
@@ -42,6 +46,8 @@ def add_subparser_sdk_compiler_rt(subparsers):
                         help='set isa model directory')
     parser.add_argument('--generator', metavar='NAME', default="Unix Makefiles",
                         help='set cmake generator')
+    parser.add_argument('-j', '--jobs', metavar='NUM', default=None, type=int,
+                        help='set number of jobs during build')
     parser.add_argument('--install-prefix', metavar='PREFIX', default="install",
                         help='set install directory')
     parser.add_argument('--llvm-project-dir', metavar='DIR', default="llvm-project",
@@ -56,6 +62,8 @@ def add_subparser_sdk_picolibc(subparsers):
                         help='set isa model directory')
     parser.add_argument('--generator', metavar='NAME', default="Unix Makefiles",
                         help='set cmake generator')
+    parser.add_argument('-j', '--jobs', metavar='NUM', default=None, type=int,
+                        help='set number of jobs during build')
     parser.add_argument('--install-prefix', metavar='PREFIX', default="install",
                         help='set install directory')
     parser.add_argument('--picolibc-dir', metavar='DIR', default="picolibc",
@@ -96,7 +104,7 @@ def copy_template_only_diff_files(files, srcdir, dstdir):
 
 
 def expand_llvm_template(args, isa):
-    print("# Expanding compiler templates")
+    print("# Expanding compiler templates", flush=True)
 
     llvmcc = isa.compiler
     llvmcc.outdir = os.path.join(args.work_dir, "build-llvm-template")
@@ -114,7 +122,7 @@ def expand_llvm_template(args, isa):
 
 
 def expand_compiler_rt_template(args, isa):
-    print("# Expanding compiler-rt templates")
+    print("# Expanding compiler-rt templates", flush=True)
 
     llvmcc = isa.compiler
     llvmcc.outdir = os.path.join(args.work_dir, "build-compiler-rt-template")
@@ -132,7 +140,7 @@ def expand_compiler_rt_template(args, isa):
 
 
 def expand_picolibc_template(args, isa):
-    print("# Expanding picolibc templates")
+    print("# Expanding picolibc templates", flush=True)
 
     llvmcc = isa.compiler
     llvmcc.outdir = os.path.join(args.work_dir, "build-picolibc-template")
@@ -172,22 +180,30 @@ def build_sdk_compiler(args, isa=None):
         "-DLLVM_DEFAULT_TARGET_TRIPLE={}".format(isa.compiler.triple),
     ]
 
-    print("# Building compiler")
-    print(" ".join([f'"{c}"' for c in cmake_cmds]))
+    print("# Building compiler", flush=True)
+    print(" ".join([f'"{c}"' for c in cmake_cmds]), flush=True)
     proc = subprocess.run(cmake_cmds)
     if proc.returncode != 0:
         raise Exception("[ERROR] failed building compiler.")
 
     pwd = os.getcwd()
     os.chdir(work_dir)
-    cmds = ["make"]
-    print(" ".join([f'"{c}"' for c in cmds]))
+    if args.generator == "Ninja":
+        cmds = ["ninja"]
+    else:  # if args.generator == "Unix Makefiles":
+        cmds = ["make"]
+    if args.jobs:
+        cmds += ["-j{}".format(args.jobs)]
+    print(" ".join([f'"{c}"' for c in cmds]), flush=True)
     proc = subprocess.run(cmds)
     if proc.returncode != 0:
         raise Exception("[ERROR] failed building compiler.")
 
-    cmds = ["make", "install"]
-    print(" ".join([f'"{c}"' for c in cmds]))
+    if args.generator == "Ninja":
+        cmds = ["ninja", "install"]
+    else:  # if args.generator == "Unix Makefiles":
+        cmds = ["make", "install"]
+    print(" ".join([f'"{c}"' for c in cmds]), flush=True)
     proc = subprocess.run(cmds)
     if proc.returncode != 0:
         raise Exception("[ERROR] failed building compiler.")
@@ -239,22 +255,30 @@ def build_sdk_compiler_rt(args, isa=None):
         "-DCOMPILER_RT_BAREMETAL_BUILD=ON",
     ]
 
-    print("# Building compiler-rt")
-    print(" ".join([f'"{c}"' for c in cmake_cmds]))
+    print("# Building compiler-rt", flush=True)
+    print(" ".join([f'"{c}"' for c in cmake_cmds]), flush=True)
     proc = subprocess.run(cmake_cmds)
     if proc.returncode != 0:
         raise Exception("[ERROR] failed building compiler-rt.")
 
     pwd = os.getcwd()
     os.chdir(work_dir)
-    cmds = ["make"]
-    print(" ".join([f'"{c}"' for c in cmds]))
+    if args.generator == "Ninja":
+        cmds = ["ninja"]
+    else:  # if args.generator == "Unix Makefiles":
+        cmds = ["make"]
+    if args.jobs:
+        cmds += ["-j{}".format(args.jobs)]
+    print(" ".join([f'"{c}"' for c in cmds]), flush=True)
     proc = subprocess.run(cmds)
     if proc.returncode != 0:
         raise Exception("[ERROR] failed building compiler-rt.")
 
-    cmds = ["make", "install"]
-    print(" ".join([f'"{c}"' for c in cmds]))
+    if args.generator == "Ninja":
+        cmds = ["ninja", "install"]
+    else:  # if args.generator == "Unix Makefiles":
+        cmds = ["make", "install"]
+    print(" ".join([f'"{c}"' for c in cmds]), flush=True)
     proc = subprocess.run(cmds)
     if proc.returncode != 0:
         raise Exception("[ERROR] failed building compiler-rt.")
@@ -285,8 +309,8 @@ def build_sdk_picolibc(args, isa=None):
         args.picolibc_dir,
     ]
 
-    print("# Building picolibc")
-    print(" ".join([f'"{c}"' for c in meson_cmds]))
+    print("# Building picolibc", flush=True)
+    print(" ".join([f'"{c}"' for c in meson_cmds]), flush=True)
     os.environ["PATH"] = os.path.join(llvm_install_prefix, "bin") + os.pathsep + os.environ["PATH"]
     proc = subprocess.run(meson_cmds)
     if proc.returncode != 0:
@@ -295,13 +319,15 @@ def build_sdk_picolibc(args, isa=None):
     pwd = os.getcwd()
     os.chdir(work_dir)
     cmds = ["ninja"]
-    print(" ".join([f'"{c}"' for c in cmds]))
+    if args.jobs:
+        cmds += ["-j{}".format(args.jobs)]
+    print(" ".join([f'"{c}"' for c in cmds]), flush=True)
     proc = subprocess.run(cmds)
     if proc.returncode != 0:
         raise Exception("[ERROR] failed building picloibc.")
 
     cmds = ["ninja", "install"]
-    print(" ".join([f'"{c}"' for c in cmds]))
+    print(" ".join([f'"{c}"' for c in cmds]), flush=True)
     proc = subprocess.run(cmds)
     if proc.returncode != 0:
         raise Exception("[ERROR] failed building picloibc.")
