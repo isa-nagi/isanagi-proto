@@ -53,6 +53,10 @@ using namespace llvm;
   setLoadExtAction({ISD::EXTLOAD, ISD::SEXTLOAD, ISD::ZEXTLOAD}, MVT::i32,
                    MVT::i1, Promote);
 
+  setStackPointerRegisterToSaveRestore({{ Xpu }}::{{ SP }});
+  setOperationAction(ISD::DYNAMIC_STACKALLOC, XLenVT,  Expand);
+  setOperationAction({ISD::STACKSAVE, ISD::STACKRESTORE}, MVT::Other, Expand);
+
   setOperationAction(ISD::BR_JT, MVT::Other, Expand);
   setOperationAction(ISD::BR_CC, XLenVT, Expand);
   // setOperationAction(ISD::BRCOND, MVT::Other, Custom);
