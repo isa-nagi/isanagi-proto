@@ -280,6 +280,40 @@ def PseudoCALLIndirect : {{ Xpu }}Inst<(outs), (ins GPR:$rs1),
   let Defs = [{{ RA }}];
 }
 
+def {{ xpu }}_tail : SDNode<"{{ Xpu }}ISD::TAIL", SDT_{{ Xpu }}Call,
+  [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
+  SDNPVariadic]>;
+
+def PseudoTAIL : {{ Xpu }}Inst<(outs), (ins call_symbol:$func),
+  "{{ pseudo_tail_asm }}",
+  []>
+  //, PseudoInstExpansion<({{ pseudo_tail_dag }})>
+{
+  let isPseudo = 1;
+  let isCodeGenOnly = 1;
+  let isCall = 1;
+  let isTerminator = 1;
+  let isReturn = 1;
+  let isBarrier = 1;
+  let Uses = [{{ SP }}];
+}
+def : Pat<({{ xpu }}_tail tglobaladdr:$func), (PseudoTAIL tglobaladdr:$func)>;
+def : Pat<({{ xpu }}_tail texternalsym:$func), (PseudoTAIL texternalsym:$func)>;
+
+def PseudoTAILIndirect : {{ Xpu }}Inst<(outs), (ins GPR:$rs1),
+  "",
+  [({{ xpu }}_tail GPR:$rs1)]>,
+  PseudoInstExpansion<({{ pseudo_tailind_dag }})>
+{
+  let isPseudo = 1;
+  let isCodeGenOnly = 1;
+  let isCall = 1;
+  let isTerminator = 1;
+  let isReturn = 1;
+  let isBarrier = 1;
+  let Uses = [{{ SP }}];
+}
+
 //=== Instruction Alias
 {% for instr_alias in instr_aliases -%}
 def : {{ instr_alias }};

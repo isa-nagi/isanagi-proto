@@ -22,7 +22,7 @@ endian = 'little'
 
 [properties]
 c_args = ['-D__riscv_xlen=32', '-D__riscv_float_abi_soft',
-          '-fno-optimize-sibling-calls',
+          # '-fno-optimize-sibling-calls',
           '-fno-jump-tables',
           '-Oz',
           ]

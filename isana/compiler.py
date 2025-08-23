@@ -1279,6 +1279,62 @@ def estimate_pseudo_callind_dag(isa, call_ops):
     return s
 
 
+def estimate_pseudo_tail_dag(isa, call_ops):
+    call_op = call_ops["tail"][0]
+    call_op, operands = call_op
+    s = call_op.__name__.upper()
+    s_ops = []
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):  # maybe 'imm'
+            # s_ops += ["call_symbol:$func"]
+            s_ops += ["{}:$func".format("Br" + prmobj.label)]
+        elif isinstance(value, int):
+            s_ops += [str(value)]
+        else:
+            s_ops += [value.label.upper()]
+    s = s + " " + ', '.join(s_ops)
+    return s
+
+
+def estimate_pseudo_tail_asm(isa, call_ops):
+    for alias in isa.instruction_aliases:
+        if hasattr(alias, "is_tail") and alias.is_tail:
+            src = re.sub(r"\$\w+", r"$func", alias.src)
+            return src
+    call_op = call_ops["tail"][0]
+    call_op, operands = call_op
+    s = call_op.__name__
+    s_ops = []
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):  # maybe 'imm'
+            s_ops += ["$func"]
+        elif isinstance(value, int):
+            s_ops += [str(value)]
+        else:
+            s_ops += [value.label]
+    s = s + " " + ', '.join(s_ops)
+    return s
+
+
+def estimate_pseudo_tailind_dag(isa, call_ops):
+    call_op = call_ops["tailind"][0]
+    call_op, operands = call_op
+    s = call_op.__name__.upper()
+    s_ops = []
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):
+            s_ops += ["{}:${}".format(prmobj.label, value)]
+        elif isinstance(value, int):
+            s_ops += [str(value)]
+        else:
+            s_ops += [value.label.upper()]
+    s = s + " " + ', '.join(s_ops)
+    return s
+
+
 def estimate_copy_reg_buildmi(isa, mv_ops, addi_ops, add_ops, zeroreg):
     for ops in mv_ops:
         return ""
@@ -1349,6 +1405,65 @@ def estimate_mc_expand_call_codes(isa, call_ops):
         prmobj, value = op
         if isinstance(value, str):  # maybe 'imm'
             s += ".addExpr(CallExpr)"
+        elif isinstance(value, int):
+            s += ".addImm({})".format(value)
+        else:
+            s += ".addReg({{Xpu}}::{})".format(value.label.upper())
+    s += ";"
+
+    ss = [
+        s,
+        "Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);",
+        "support::endian::write(CB, Binary, llvm::endianness::little);",
+    ]
+    return ss
+
+
+def estimate_mc_expand_longtail_codes(isa, call_ops):
+    sss = []
+    if call_ops["longtail"]:
+        for i, op_info in enumerate(call_ops["longtail"][0]):
+            op, operands = op_info
+            s = "TmpInst = MCInstBuilder({{Xpu}}::{opname})".format(
+                opname=op.__name__.upper(),
+            )
+            for op in operands:
+                prmobj, value = op
+                if isinstance(value, str):  # maybe 'imm'
+                    if value == "imm":
+                        if i == 0:
+                            s += ".addExpr(CallExpr)"
+                        else:
+                            s += ".addImm(0)"
+                    else:
+                        s += ".addReg({{Xpu}}::{})".format(value.upper())
+                elif isinstance(value, int):
+                    s += ".addImm({})".format(value)
+                else:
+                    s += ".addReg({{Xpu}}::{})".format(value.label.upper())
+            s += ";"
+
+            ss = [
+                s,
+                "Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);",
+                "support::endian::write(CB, Binary, llvm::endianness::little);",
+            ]
+            sss += ss
+    return sss
+
+
+def estimate_mc_expand_tail_codes(isa, call_ops):
+    call_op, operands = call_ops["tail"][0]
+    s = "TmpInst = MCInstBuilder({{Xpu}}::{opname})".format(
+        opname=call_op.__name__.upper(),
+    )
+    for op in operands:
+        prmobj, value = op
+        if isinstance(value, str):  # maybe 'imm'
+            if value == "imm":
+                s += ".addExpr(CallExpr)"
+            else:
+                s += ".addReg({{Xpu}}::{})".format(value.upper())
         elif isinstance(value, int):
             s += ".addImm({})".format(value)
         else:
@@ -2197,6 +2312,9 @@ class LLVMCompiler():
         pseudo_call_dag = estimate_pseudo_call_dag(self.isa, call_ops)
         pseudo_callind_dag = estimate_pseudo_callind_dag(self.isa, call_ops)
         pseudo_call_asm = estimate_pseudo_call_asm(self.isa, call_ops)
+        pseudo_tail_dag = estimate_pseudo_tail_dag(self.isa, call_ops)
+        pseudo_tailind_dag = estimate_pseudo_tailind_dag(self.isa, call_ops)
+        pseudo_tail_asm = estimate_pseudo_tail_asm(self.isa, call_ops)
 
         # llvm/lib/Target/Xpu/AsmParser/
         asm_operand_clss = []
@@ -2261,6 +2379,18 @@ class LLVMCompiler():
         for line in _codes:
             line = line.format(Xpu=self.namespace)
             mc_call_codes.append(line)
+
+        _codes = estimate_mc_expand_longtail_codes(self.isa, call_ops)
+        mc_longtail_codes = []
+        for line in _codes:
+            line = line.format(Xpu=self.namespace)
+            mc_longtail_codes.append(line)
+
+        _codes = estimate_mc_expand_tail_codes(self.isa, call_ops)
+        mc_tail_codes = []
+        for line in _codes:
+            line = line.format(Xpu=self.namespace)
+            mc_tail_codes.append(line)
 
         # llvm/lib/Target/Xpu/XpuInstrInfo.cpp
         _codes = estimate_add_immediate_codes(self.isa, li_ops)
@@ -2352,6 +2482,9 @@ class LLVMCompiler():
             "pseudo_call_dag": pseudo_call_dag,
             "pseudo_callind_dag": pseudo_callind_dag,
             "pseudo_call_asm": pseudo_call_asm,
+            "pseudo_tail_dag": pseudo_tail_dag,
+            "pseudo_tailind_dag": pseudo_tailind_dag,
+            "pseudo_tail_asm": pseudo_tail_asm,
 
             "instr_bitsizes": instr_bitsizes,
 
@@ -2377,6 +2510,8 @@ class LLVMCompiler():
 
             "mc_longcall_codes": mc_longcall_codes,
             "mc_call_codes": mc_call_codes,
+            "mc_longtail_codes": mc_longtail_codes,
+            "mc_tail_codes": mc_tail_codes,
 
             "addimm_codes": addimm_codes,
             "copy_reg_buildmi": copy_reg_buildmi,

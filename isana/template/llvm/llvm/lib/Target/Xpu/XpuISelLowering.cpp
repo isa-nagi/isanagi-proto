@@ -379,7 +379,8 @@ SDValue
   SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
 
   if (IsTailCall) {
-    // return DAG.getNode({{ Xpu }}ISD::TailCall, DL, MVT::Other, Ops);
+    MF.getFrameInfo().setHasTailCall();
+    return DAG.getNode({{ Xpu }}ISD::TAIL, DL, NodeTys, Ops);
   }
 
   Chain = DAG.getNode({{ Xpu }}ISD::CALL, DL, NodeTys, Ops);

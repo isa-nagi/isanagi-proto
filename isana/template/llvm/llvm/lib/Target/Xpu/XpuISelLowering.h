@@ -14,6 +14,7 @@ enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
   RET_GLUE,
   CALL,
+  TAIL,
   SELECT_CC,
   BR_CC,
   Wrapper,

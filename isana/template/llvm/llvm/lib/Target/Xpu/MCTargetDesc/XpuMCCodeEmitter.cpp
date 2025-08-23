@@ -95,6 +95,10 @@ void
   MCRegister Ra;
   uint32_t Binary;
 
+  if (MI.getOpcode() == {{ Xpu }}::PseudoTAIL) {
+    Func = MI.getOperand(0);
+    Ra = {{ Xpu }}::X6;
+  }
   if (MI.getOpcode() == {{ Xpu }}::PseudoCALL) {
     Func = MI.getOperand(0);
     Ra = {{ Xpu }}::{{ RA }};
@@ -104,23 +108,36 @@ void
 
   const MCExpr *CallExpr = Func.getExpr();
 
-  if ({% if mc_longcall_codes %}1{% else %}0{% endif %}) {
-    // long jump
-    //           | --RISC-V spec--
-    // call func | auipc x1, <expr:sym=func>
-    //           |   + fixup:call
-    //           | jalr x1, x1, 0
-    {%- for line in mc_longcall_codes %}
-    {{ line }}
-    {%- endfor %}
-  } else {
-    // short jump
-    //           | --RISC-V spec--
-    // call func | jal x1, <expr:sym=func>
-    //           |   + fixup:call
-    {%- for line in mc_call_codes %}
-    {{ line }}
-    {%- endfor %}
+  if (MI.getOpcode() == {{ Xpu }}::PseudoTAIL) {
+    if ({% if mc_longtail_codes %}1{% else %}0{% endif %}) {
+      {%- for line in mc_longtail_codes %}
+      {{ line }}
+      {%- endfor %}
+    } else {
+      {%- for line in mc_tail_codes %}
+      {{ line }}
+      {%- endfor %}
+    }
+  } else
+  if (MI.getOpcode() == {{ Xpu }}::PseudoCALL) {
+    if ({% if mc_longcall_codes %}1{% else %}0{% endif %}) {
+      // long jump
+      //           | --RISC-V spec--
+      // call func | auipc x1, <expr:sym=func>
+      //           |   + fixup:call
+      //           | jalr x1, x1, 0
+      {%- for line in mc_longcall_codes %}
+      {{ line }}
+      {%- endfor %}
+    } else {
+      // short jump
+      //           | --RISC-V spec--
+      // call func | jal x1, <expr:sym=func>
+      //           |   + fixup:call
+      {%- for line in mc_call_codes %}
+      {{ line }}
+      {%- endfor %}
+    }
   }
 }
 
@@ -297,6 +314,7 @@ void
   default:
     break;
   case {{ Xpu }}::PseudoCALL:
+  case {{ Xpu }}::PseudoTAIL:
     expandFunctionCall(MI, CB, Fixups, STI);
     return;
   {%- for key in long_br_codes['infos'] %}
