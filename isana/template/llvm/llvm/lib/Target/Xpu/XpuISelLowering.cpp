@@ -434,6 +434,20 @@ SDValue
   }
 }
 
+Register
+{{ Xpu }}TargetLowering::getExceptionPointerRegister(
+  const Constant *PersonalityFn
+) const {
+  return {{ Xpu }}::{{ arg_regs[0] }};
+}
+
+Register
+{{ Xpu }}TargetLowering::getExceptionSelectorRegister(
+  const Constant *PersonalityFn
+) const {
+  return {{ Xpu }}::{{ arg_regs[1] }};
+}
+
 static SDValue getTargetNode(GlobalAddressSDNode *N, const SDLoc &DL, EVT Ty,
                              SelectionDAG &DAG, unsigned Flags) {
   return DAG.getTargetGlobalAddress(N->getGlobal(), DL, Ty, 0, Flags);
