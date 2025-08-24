@@ -46,6 +46,7 @@ unsigned
       LLVM_DEBUG(dbgs() << "Unknown Kind1  = " << Kind);
       Ctx.reportError(Fixup.getLoc(), "Unsupported relocation type");
       return ELF::R_CKCORE_NONE;
+    case FK_Data_4:
     case FK_PCRel_4:
       return ELF::R_CKCORE_PCREL32;
     case {{ Xpu }}::{{ fixup_call.name_enum }}:
