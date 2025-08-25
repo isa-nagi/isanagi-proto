@@ -55,14 +55,15 @@ riscvxpu
     ├── bin
     ├── include
     ├── lib
-    │   └── clang
-    │       └── 20  # compiler-rt
-    │           ├── include
-    │           └── lib
+    │   ├── clang
+    │   │   └── 20  # compiler-rt
+    │   │       ├── include
+    │   │       └── lib
+    │   └── clang-runtimes
+    │       └── riscvxpu32le-unknown-elf  # picolibc
+    │           ├── include
+    │           └── lib
     ├── libexec
-    ├── picolibc
-    │   ├── include
-    │   └── lib
     └── share
 ```
 
