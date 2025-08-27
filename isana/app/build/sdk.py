@@ -14,6 +14,8 @@ def add_subparser_sdk(subparsers):
                         help='set cmake generator')
     parser.add_argument('-j', '--jobs', metavar='NUM', default=None, type=int,
                         help='set number of jobs during build')
+    parser.add_argument('--debug', default=False, action='store_true',
+                        help='set debug build')
     parser.add_argument('--install-prefix', metavar='PREFIX', default="install",
                         help='set install directory')
     parser.add_argument('--llvm-project-dir', metavar='DIR', default="llvm-project",
@@ -32,6 +34,8 @@ def add_subparser_sdk_compiler(subparsers):
                         help='set cmake generator')
     parser.add_argument('-j', '--jobs', metavar='NUM', default=None, type=int,
                         help='set number of jobs during build')
+    parser.add_argument('--debug', default=False, action='store_true',
+                        help='set debug build')
     parser.add_argument('--install-prefix', metavar='PREFIX', default="install",
                         help='set install directory')
     parser.add_argument('--llvm-project-dir', metavar='DIR', default="llvm-project",
@@ -48,6 +52,8 @@ def add_subparser_sdk_compiler_rt(subparsers):
                         help='set cmake generator')
     parser.add_argument('-j', '--jobs', metavar='NUM', default=None, type=int,
                         help='set number of jobs during build')
+    parser.add_argument('--debug', default=False, action='store_true',
+                        help='set debug build')
     parser.add_argument('--install-prefix', metavar='PREFIX', default="install",
                         help='set install directory')
     parser.add_argument('--llvm-project-dir', metavar='DIR', default="llvm-project",
@@ -64,6 +70,8 @@ def add_subparser_sdk_picolibc(subparsers):
                         help='set cmake generator')
     parser.add_argument('-j', '--jobs', metavar='NUM', default=None, type=int,
                         help='set number of jobs during build')
+    parser.add_argument('--debug', default=False, action='store_true',
+                        help='set debug build')
     parser.add_argument('--install-prefix', metavar='PREFIX', default="install",
                         help='set install directory')
     parser.add_argument('--picolibc-dir', metavar='DIR', default="picolibc",
@@ -171,7 +179,6 @@ def build_sdk_compiler(args, isa=None):
         "-S", "{}".format(os.path.join(args.llvm_project_dir, "llvm")),
         "-B", "{}".format(work_dir),
         "-G", "{}".format(args.generator),
-        "-DCMAKE_BUILD_TYPE=Debug",
         "-DCMAKE_INSTALL_PREFIX={}".format(llvm_install_prefix),
         "-DCMAKE_CXX_COMPILER=clang++",
         "-DCMAKE_C_COMPILER=clang",
@@ -179,6 +186,11 @@ def build_sdk_compiler(args, isa=None):
         "-DLLVM_ENABLE_PROJECTS=clang;lld",
         "-DLLVM_DEFAULT_TARGET_TRIPLE={}".format(isa.compiler.triple),
     ]
+
+    if args.debug:
+        cmake_cmds += ["-DCMAKE_BUILD_TYPE=Debug"]
+    else:
+        cmake_cmds += ["-DCMAKE_BUILD_TYPE=Release"]
 
     print("# Building compiler", flush=True)
     print(" ".join([f'"{c}"' for c in cmake_cmds]), flush=True)
@@ -227,7 +239,6 @@ def build_sdk_compiler_rt(args, isa=None):
         "-S", "{}".format(os.path.join(args.llvm_project_dir, "compiler-rt")),
         "-B", "{}".format(work_dir),
         "-G", "{}".format(args.generator),
-        "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INSTALL_PREFIX={}".format(rt_install_prefix),
         "-DCMAKE_C_COMPILER_TARGET={}".format(isa.compiler.triple),
         "-DCMAKE_ASM_COMPILER_TARGET={}".format(isa.compiler.triple),
@@ -254,6 +265,11 @@ def build_sdk_compiler_rt(args, isa=None):
         "-DCOMPILER_RT_OS_DIR=baremetal",
         "-DCOMPILER_RT_BAREMETAL_BUILD=ON",
     ]
+
+    if args.debug:
+        cmake_cmds += ["-DCMAKE_BUILD_TYPE=Debug"]
+    else:
+        cmake_cmds += ["-DCMAKE_BUILD_TYPE=Release"]
 
     print("# Building compiler-rt", flush=True)
     print(" ".join([f'"{c}"' for c in cmake_cmds]), flush=True)
@@ -305,6 +321,12 @@ def build_sdk_picolibc(args, isa=None):
         "-Dlibdir=lib",
         "-Dprefix={}".format(picolibc_install_prefix),
         "--cross-file", cross_file,
+    ]
+
+    if args.debug:
+        meson_cmds += ["--debug"]
+
+    meson_cmds += [
         work_dir,
         args.picolibc_dir,
     ]
