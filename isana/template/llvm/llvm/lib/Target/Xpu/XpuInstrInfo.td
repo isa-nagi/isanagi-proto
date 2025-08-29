@@ -55,6 +55,7 @@ def {{ inst.varname }}: {{ Xpu }}Inst<
 {{ inst.bit_defs }}
 {{ inst.bit_insts }}
 {{ inst.attrs }}
+{{ inst.predicates }}
 }
 {% endfor %}
 

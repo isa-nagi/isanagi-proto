@@ -36,6 +36,11 @@ using namespace llvm;
   // Compute derived properties from the register classes
   computeRegisterProperties(Subtarget.getRegisterInfo());
 
+  // if ({{ features.has_mul }})
+  //   setOperationAction({ISD::MUL, ISD::MULHS, ISD::MULHU}, XLenVT, Expand);
+  // if ({{ features.has_div }})
+  //   setOperationAction({ISD::SDIV, ISD::UDIV, ISD::SREM, ISD::UREM}, XLenVT, Expand);
+
   setOperationAction({ISD::SMUL_LOHI, ISD::UMUL_LOHI}, XLenVT, Expand);
   setOperationAction(ISD::BSWAP, XLenVT, Expand);  // TODO: Zbb | Zbkb => Legal
   setOperationAction({ISD::CTTZ, ISD::CTLZ, ISD::CTPOP}, XLenVT, Expand);

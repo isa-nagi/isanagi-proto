@@ -51,14 +51,15 @@ static MCRegisterInfo *create{{ Xpu }}MCRegisterInfo(const Triple &TT) {
 static MCSubtargetInfo *create{{ Xpu }}MCSubtargetInfo(const Triple &TT,
                                                       StringRef CPU, StringRef FS) {
   if (CPU.empty() || CPU == "generic") {
-    if (TT.getArch() == llvm::Triple::{{ xpu }}64be)
-      CPU = "xpu-64be";
-    else if (TT.getArch() == llvm::Triple::{{ xpu }}64le)
-      CPU = "xpu-64le";
-    else if (TT.getArch() == llvm::Triple::{{ xpu }}32be)
-      CPU = "xpu-32be";
-    else if (TT.getArch() == llvm::Triple::{{ xpu }}32le)
-      CPU = "xpu-32le";
+    // if (TT.getArch() == llvm::Triple::{{ xpu }}64be)
+    //   CPU = "xpu64be";
+    // else if (TT.getArch() == llvm::Triple::{{ xpu }}64le)
+    //   CPU = "xpu64le";
+    // else if (TT.getArch() == llvm::Triple::{{ xpu }}32be)
+    //   CPU = "xpu32be";
+    // else if (TT.getArch() == llvm::Triple::{{ xpu }}32le)
+    //   CPU = "xpu32le";
+    CPU = "{{ processors[0].name }}";
   }
   return create{{ Xpu }}MCSubtargetInfoImpl(TT, CPU, /*TuneCPU*/CPU ,FS);
 }

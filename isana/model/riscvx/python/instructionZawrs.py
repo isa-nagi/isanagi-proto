@@ -6,10 +6,12 @@ from .instructionType import (
 
 
 class wrs_nto(InstrO):
+    subsets = ["ext-zawrs"]
     opn, opc = "wrs.nto", 0b000000001101_00000_000_00000_1110011
 
 
 class wrs_sto(InstrO):
+    subsets = ["ext-zawrs"]
     opn, opc = "wrs.sto", 0b000000011101_00000_000_00000_1110011
 
 

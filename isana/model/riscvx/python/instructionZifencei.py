@@ -6,6 +6,7 @@ from .instructionType import (
 
 
 class fence_i(InstrIFencei):
+    subsets = ["ext-zifencei"]
     opn, opc = "fence.i", 0b000000000000_00000_001_00000_0001111
 
 

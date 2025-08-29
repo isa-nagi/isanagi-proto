@@ -10,6 +10,7 @@ from .instructionType import (
 
 
 class mul(InstrR):
+    subsets = ["ext-m"]
     opn, opc = "mul", 0b0000001_00000_00000_000_00000_0110011
 
     def semantic(self, ctx, ins):
@@ -17,6 +18,7 @@ class mul(InstrR):
 
 
 class mulh(InstrR):
+    subsets = ["ext-m"]
     opn, opc = "mulh", 0b0000001_00000_00000_001_00000_0110011
 
     def semantic(self, ctx, ins):
@@ -24,6 +26,7 @@ class mulh(InstrR):
 
 
 class mulhsu(InstrR):
+    subsets = ["ext-m"]
     opn, opc = "mulhsu", 0b0000001_00000_00000_010_00000_0110011
 
     def semantic(self, ctx, ins):
@@ -31,6 +34,7 @@ class mulhsu(InstrR):
 
 
 class mulhu(InstrR):
+    subsets = ["ext-m"]
     opn, opc = "mulhu", 0b0000001_00000_00000_011_00000_0110011
 
     def semantic(self, ctx, ins):
@@ -38,6 +42,7 @@ class mulhu(InstrR):
 
 
 class div(InstrR):
+    subsets = ["ext-m"]
     opn, opc = "div", 0b0000001_00000_00000_100_00000_0110011
 
     def semantic(self, ctx, ins):
@@ -45,6 +50,7 @@ class div(InstrR):
 
 
 class divu(InstrR):
+    subsets = ["ext-m"]
     opn, opc = "divu", 0b0000001_00000_00000_101_00000_0110011
 
     def semantic(self, ctx, ins):
@@ -52,6 +58,7 @@ class divu(InstrR):
 
 
 class rem(InstrR):
+    subsets = ["ext-m"]
     opn, opc = "rem", 0b0000001_00000_00000_110_00000_0110011
 
     def semantic(self, ctx, ins):
@@ -59,6 +66,7 @@ class rem(InstrR):
 
 
 class remu(InstrR):
+    subsets = ["ext-m"]
     opn, opc = "remu", 0b0000001_00000_00000_111_00000_0110011
 
     def semantic(self, ctx, ins):
@@ -66,6 +74,7 @@ class remu(InstrR):
 
 
 class mulw(InstrR):
+    subsets = ["rv64", "ext-m"]
     opn, opc = "mulw", 0b0000001_00000_00000_000_00000_0111011
 
     def semantic(self, ctx, ins):
@@ -73,6 +82,7 @@ class mulw(InstrR):
 
 
 class divw(InstrR):
+    subsets = ["rv64", "ext-m"]
     opn, opc = "divw", 0b0000001_00000_00000_100_00000_0111011
 
     def semantic(self, ctx, ins):
@@ -80,6 +90,7 @@ class divw(InstrR):
 
 
 class divuw(InstrR):
+    subsets = ["rv64", "ext-m"]
     opn, opc = "divuw", 0b0000001_00000_00000_101_00000_0111011
 
     def semantic(self, ctx, ins):
@@ -87,6 +98,7 @@ class divuw(InstrR):
 
 
 class remw(InstrR):
+    subsets = ["rv64", "ext-m"]
     opn, opc = "remw", 0b0000001_00000_00000_110_00000_0111011
 
     def semantic(self, ctx, ins):
@@ -94,6 +106,7 @@ class remw(InstrR):
 
 
 class remuw(InstrR):
+    subsets = ["rv64", "ext-m"]
     opn, opc = "remuw", 0b0000001_00000_00000_111_00000_0111011
 
     def semantic(self, ctx, ins):

@@ -93,6 +93,7 @@ class ISA():
     def __init__(self, **kwargs):
         self.name = kwargs.pop('name')
         self.endian = kwargs.pop('endian', "little")
+        self.subsets = kwargs.pop('subsets', [])
         self.registers = kwargs.pop('registers')
         self.memories = kwargs.pop('memories')
         self.immediates = kwargs.pop('immediates')
@@ -451,6 +452,13 @@ class ISA():
         return instr
 
 
+class Subset():
+    def __init__(self, name, **kwargs):
+        self.name = name
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
 class Context():
     def __init__(self, **kwargs):
         self.name = kwargs.get('name')
@@ -615,6 +623,8 @@ class ImmS(Immediate):
 class Instruction():
     isa = None
 
+    subsets = []
+
     opc = None
     opn = None
     prm = None
@@ -636,6 +646,7 @@ class Instruction():
     is_push = False
 
     has_sideeffect = False
+    llvm_ir = None
 
     def __init__(self):
         # self.isa = None

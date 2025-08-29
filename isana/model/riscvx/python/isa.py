@@ -3,6 +3,7 @@ from isana.isa import Context
 # from isana.isa import signed
 # from isana.isa import unimpl
 
+from .subsets import subsets
 from .memory import Mem
 from .register import PCR, GPR, GPRC, FPR, CSR
 from .datatype import (Imm, ImmS12, ImmS12O1, ImmS20O1, ImmS20O12, ImmS6, ImmS9, ImmS32O2,
@@ -37,6 +38,7 @@ class RiscvXISA(ISA):
 
 isa = RiscvXISA(
     name="RiscvX",
+    subsets=subsets,
     registers=(
         PCR,
         GPR,

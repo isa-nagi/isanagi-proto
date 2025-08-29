@@ -12,6 +12,7 @@ from .instructionType import (
 
 
 class flw(InstrFILoad):
+    subsets = ["ext-f"]
     opn, opc = "flw", 0b000000000000_00000_010_00000_0000111
 
     @property
@@ -24,6 +25,7 @@ class flw(InstrFILoad):
 
 
 class fsw(InstrFS):
+    subsets = ["ext-f"]
     opn, opc = "fsw", 0b0000000_00000_00000_010_00000_0100111
 
     @property
@@ -36,123 +38,151 @@ class fsw(InstrFS):
 
 
 class fmadd_s(InstrFR4):
+    subsets = ["ext-f"]
     opn, opc = "fmadd.s", 0b00000_00_00000_00000_000_00000_1000011
 
 
 class fmsub_s(InstrFR4):
+    subsets = ["ext-f"]
     opn, opc = "fmsub.s", 0b00000_00_00000_00000_000_00000_1000111
 
 
 class fnmadd_s(InstrFR4):
+    subsets = ["ext-f"]
     opn, opc = "fnmadd.s", 0b00000_00_00000_00000_000_00000_1001011
 
 
 class fnmsub_s(InstrFR4):
+    subsets = ["ext-f"]
     opn, opc = "fnmsub.s", 0b00000_00_00000_00000_000_00000_1001111
 
 
 class fadd_s(InstrFRrm):
+    subsets = ["ext-f"]
     opn, opc = "fadd.s", 0b0000000_00000_00000_000_00000_1010011
 
 
 class fsub_s(InstrFRrm):
+    subsets = ["ext-f"]
     opn, opc = "fsub.s", 0b0000100_00000_00000_000_00000_1010011
 
 
 class fmul_s(InstrFRrm):
+    subsets = ["ext-f"]
     opn, opc = "fmul.s", 0b0001000_00000_00000_000_00000_1010011
 
 
 class fdiv_s(InstrFRrm):
+    subsets = ["ext-f"]
     opn, opc = "fdiv.s", 0b0001100_00000_00000_000_00000_1010011
 
 
 class fsqrt_s(InstrFR2rm):
+    subsets = ["ext-f"]
     opn, opc = "fsqrt.s", 0b0101100_00000_00000_000_00000_1010011
 
 
 class fsgnj_s(InstrFR):
+    subsets = ["ext-f"]
     opn, opc = "fsgnj.s", 0b0010000_00000_00000_000_00000_1010011
 
 
 class fsgnjn_s(InstrFR):
+    subsets = ["ext-f"]
     opn, opc = "fsgnjn.s", 0b0010000_00000_00000_001_00000_1010011
 
 
 class fsgnjx_s(InstrFR):
+    subsets = ["ext-f"]
     opn, opc = "fsgnjx.s", 0b0010000_00000_00000_010_00000_1010011
 
 
 class fmin_s(InstrFR):
+    subsets = ["ext-f"]
     opn, opc = "fmin.s", 0b0010100_00000_00000_000_00000_1010011
 
 
 class fmax_s(InstrFR):
+    subsets = ["ext-f"]
     opn, opc = "fmin.s", 0b0010100_00000_00000_001_00000_1010011
 
 
 class fcvt_w_s(InstrFR2rm):
+    subsets = ["ext-f"]
     prm = parameter("rd:GPR", "rs1:FPR, rm:Imm")
     opn, opc = "fcvt.w.s", 0b1100000_00000_00000_000_00000_1010011
 
 
 class fcvt_wu_s(InstrFR2rm):
+    subsets = ["ext-f"]
     prm = parameter("rd:GPR", "rs1:FPR, rm:Imm")
     opn, opc = "fcvt.wu.s", 0b1100000_00001_00000_000_00000_1010011
 
 
 class fmv_x_w(InstrFR2):
+    subsets = ["ext-f"]
     prm = parameter("rd:GPR", "rs1:FPR")
     opn, opc = "fmv.x.w", 0b1110000_00000_00000_000_00000_1010011
 
 
 class feq_s(InstrFR):
+    subsets = ["ext-f"]
     opn, opc = "feq.s", 0b1010000_00000_00000_010_00000_1010011
 
 
 class flt_s(InstrFR):
+    subsets = ["ext-f"]
     opn, opc = "flt.s", 0b1010000_00000_00000_001_00000_1010011
 
 
 class fle_s(InstrFR):
+    subsets = ["ext-f"]
     opn, opc = "fle.s", 0b1010000_00000_00000_000_00000_1010011
 
 
 class fclass_s(InstrFR):
+    subsets = ["ext-f"]
     opn, opc = "fclass.s", 0b1110000_00000_00000_001_00000_1010011
 
 
 class fcvt_s_w(InstrFR2rm):
+    subsets = ["ext-f"]
     prm = parameter("rd:FPR", "rs1:GPR, rm:Imm")
     opn, opc = "fcvt.s.w", 0b1101000_00000_00000_000_00000_1010011
 
 
 class fcvt_s_wu(InstrFR2rm):
+    subsets = ["ext-f"]
     prm = parameter("rd:FPR", "rs1:GPR, rm:Imm")
     opn, opc = "fcvt.s.wu", 0b1101000_00001_00000_000_00000_1010011
 
 
 class fmv_w_x(InstrFR2):
+    subsets = ["ext-f"]
     prm = parameter("rd:FPR", "rs1:GPR")
     opn, opc = "fmv.w.x", 0b1111000_00000_00000_000_00000_1010011
 
 
 class fcvt_l_s(InstrFR2rm):
+    subsets = ["rv64", "ext-f"]
     prm = parameter("rd:GPR", "rs1:FPR, rm:Imm")
     opn, opc = "fcvt.l.s", 0b1100000_00010_00000_000_00000_1010011
 
 
 class fcvt_lu_s(InstrFR2rm):
+    subsets = ["rv64", "ext-f"]
     prm = parameter("rd:GPR", "rs1:FPR, rm:Imm")
     opn, opc = "fcvt.lu.s", 0b1100000_00011_00000_000_00000_1010011
 
 
 class fcvt_s_l(InstrFR2rm):
+    subsets = ["rv64", "ext-f"]
     prm = parameter("rd:FPR", "rs1:GPR, rm:Imm")
     opn, opc = "fcvt.s.l", 0b1101000_00010_00000_000_00000_1010011
 
 
 class fcvt_s_lu(InstrFR2rm):
+    subsets = ["rv64", "ext-f"]
     prm = parameter("rd:FPR", "rs1:GPR, rm:Imm")
     opn, opc = "fcvt.s.lu", 0b1101000_00011_00000_000_00000_1010011
 

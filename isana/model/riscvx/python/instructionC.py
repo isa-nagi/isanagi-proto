@@ -13,6 +13,7 @@ from .instructionType import (
 
 
 class illegal(InstrCIW):
+    subsets = ["ext-zca"]
     opn, opc = "illegal", 0b000_00000000_000_00
     prm = parameter("", "")
     asm = assembly("$opn")
@@ -20,18 +21,21 @@ class illegal(InstrCIW):
 
 
 class c_addi4spn(InstrCIW):
+    subsets = ["ext-zca"]
     opn, opc = "c.addi4spn", 0b000_00000000_000_00
     prm = parameter("rd:GPRC", "imm:ImmS32O2")
     bin = binary("$opc[15:13], $imm[5:4], $imm[9:6], $imm[2], $imm[3], $rd[2:0], $opc[1:0]")
 
 
 class c_fld(InstrCL):
+    subsets = ["ext-zcd"]
     prm = parameter("rd:GPRC", "rs1:GPRC, imm:ImmS5O3")
     opn, opc = "c.fld", 0b001_000_000_00_000_00
     bin = binary("$opc[15:13], $imm[5:3], $rs1[2:0], $imm[7:6], $rd[2:0], $opc[1:0]")
 
 
 class c_lq(InstrCL):
+    subsets = ["rv128", "ext-zca"]
     opn, opc = "c.lq", 0b001_000_000_00_000_00
     prm = parameter("rd:GPRC", "rs1:GPRC, imm:ImmS5O4")
     bin = binary("$opc[15:13], $imm[5:4], $imm[8], $rs1[2:0], $imm[7:6], $rd[2:0], $opc[1:0]")
@@ -39,6 +43,7 @@ class c_lq(InstrCL):
 
 
 class c_lw(InstrCL):
+    subsets = ["ext-zca"]
     opn, opc = "c.lw", 0b010_000_000_00_000_00
     prm = parameter("rd:GPRC", "rs1:GPRC, imm:ImmS5O2")
     bin = binary("$opc[15:13], $imm[5:3], $rs1[2:0], $imm[2], $imm[6], $rd[2:0], $opc[1:0]")
@@ -46,6 +51,7 @@ class c_lw(InstrCL):
 
 
 class c_flw(InstrCL):
+    subsets = ["rv32", "ext-zcf"]
     opn, opc = "c.flw", 0b011_000_000_00_000_00
     prm = parameter("rd:GPRC", "rs1:GPRC, imm:ImmS5O2")
     bin = binary("$opc[15:13], $imm[5:3], $rs1[2:0], $imm[2], $imm[6], $rd[2:0], $opc[1:0]")
@@ -53,6 +59,7 @@ class c_flw(InstrCL):
 
 
 class c_ld(InstrCL):
+    subsets = ["rv64", "ext-zca"]
     opn, opc = "c.ld", 0b011_000_000_00_000_00
     prm = parameter("rd:GPRC", "rs1:GPRC, imm:ImmS5O3")
     bin = binary("$opc[15:13], $imm[5:3], $rs1[2:0], $imm[7:6], $rd[2:0], $opc[1:0]")
@@ -60,6 +67,7 @@ class c_ld(InstrCL):
 
 
 class c_fsd(InstrCS):
+    subsets = ["ext-zcd"]
     opn, opc = "c.fsd", 0b101_000_000_00_000_00
     prm = parameter("rd:GPRC", "rs1:GPRC, imm:ImmS5O3")
     bin = binary("$opc[15:13], $imm[5:3], $rs1[2:0], $imm[7:6], $rs2[2:0], $opc[1:0]")
@@ -67,6 +75,7 @@ class c_fsd(InstrCS):
 
 
 class c_sq(InstrCS):
+    subsets = ["rv128", "ext-zca"]
     opn, opc = "c.sq", 0b101_000_000_00_000_00
     prm = parameter("", "rs2:GPRC, rs1:GPRC, imm:ImmS5O4")
     bin = binary("$opc[15:13], $imm[5:4], $imm[8:8], $rs1[2:0], $imm[7:6], $rs2[2:0], $opc[1:0]")
@@ -74,6 +83,7 @@ class c_sq(InstrCS):
 
 
 class c_sw(InstrCS):
+    subsets = ["ext-zca"]
     opn, opc = "c.sw", 0b110_000_000_00_000_00
     prm = parameter("", "rs2:GPRC, rs1:GPRC, imm:ImmS5O2")
     bin = binary("$opc[15:13], $imm[5:3], $rs1[2:0], $imm[2], $imm[6], $rs2[2:0], $opc[1:0]")
@@ -81,6 +91,7 @@ class c_sw(InstrCS):
 
 
 class c_fsw(InstrCS):
+    subsets = ["rv32", "ext-zcf"]
     opn, opc = "c.fsw", 0b111_000_000_00_000_00
     prm = parameter("", "rs2:GPRC, rs1:GPRC, imm:ImmS5O2")
     bin = binary("$opc[15:13], $imm[5:3], $rs1[2:0], $imm[2], $imm[6], $rs2[2:0], $opc[1:0]")
@@ -88,6 +99,7 @@ class c_fsw(InstrCS):
 
 
 class c_sd(InstrCS):
+    subsets = ["rv64", "ext-zca"]
     opn, opc = "c.sd", 0b111_000_000_00_000_00
     prm = parameter("", "rs2:GPRC, rs1:GPRC, imm:ImmS5O3")
     bin = binary("$opc[15:13], $imm[5:3], $rs1[2:0], $imm[7:6], $rs2[2:0], $opc[1:0]")
@@ -95,14 +107,17 @@ class c_sd(InstrCS):
 
 
 class c_nop(InstrCI01Nop):
+    subsets = ["ext-zca"]
     opn, opc = "c.nop", 0b000_0_00000_00000_01
 
 
 class c_addi(InstrCI01):
+    subsets = ["ext-zca"]
     opn, opc = "c.addi", 0b000_0_00000_00000_01
 
 
 class c_jal(InstrCJ):
+    subsets = ["ext-zca"]
     opn, opc = "c.jal", 0b001_0_00000_00000_01
     prm = parameter("", "imm:ImmS11O1")
     bin = binary("$opc[15:13], $imm[11], $imm[4], $imm[9:8], $imm[10], "
@@ -115,14 +130,17 @@ class c_jal(InstrCJ):
 
 
 class c_addiw(InstrCI01):
+    subsets = ["rv64", "ext-zca"]
     opn, opc = "c.addiw", 0b001_0_00000_00000_01
 
 
 class c_li(InstrCI01):
+    subsets = ["ext-zca"]
     opn, opc = "c.li", 0b010_0_00000_00000_01
 
 
 class c_addi16sp(InstrCI01):
+    subsets = ["ext-zca"]
     opn, opc = "c.addi16sp", 0b011_0_00010_00000_01
     prm = parameter("rdrs1:GPR", "imm:ImmS6O4")
     asm = assembly("$opn $imm")
@@ -130,59 +148,72 @@ class c_addi16sp(InstrCI01):
 
 
 class c_lui(InstrCI01):
+    subsets = ["ext-zca"]
     opn, opc = "c.lui", 0b011_0_00000_00000_01
 
 
 class c_srli(InstrCB):
+    subsets = ["ext-zca"]
     opn, opc = "c.srli", 0b100_0_00_000_00000_01
     bin = binary("$opc[15:13], $imm[5], $opc[11:10], $rdrs1[2:0], $imm[4:0], $opc[1:0]")
 
 
 class c_srli64(InstrCB):
+    subsets = ["ext-zca"]
     opn, opc = "c.srli64", 0b100_0_00_000_00000_01
     bin = binary("$opc[15:13], $opc[12], $opc[11:10], $rdrs1[2:0], $opc[6:2], $opc[1:0]")
 
 
 class c_srai(InstrCB):
+    subsets = ["ext-zca"]
     opn, opc = "c.srai", 0b100_0_01_000_00000_01
     bin = binary("$opc[15:13], $imm[5], $opc[11:10], $rdrs1[2:0], $imm[4:0], $opc[1:0]")
 
 
 class c_srai64(InstrCB):
+    subsets = ["ext-zca"]
     opn, opc = "c.srai64", 0b100_0_01_000_00000_01
     bin = binary("$opc[15:13], $opc[12], $opc[11:10], $rdrs1[2:0], $opc[6:2], $opc[1:0]")
 
 
 class c_andi(InstrCB):
+    subsets = ["ext-zca"]
     opn, opc = "c.srai", 0b100_0_10_000_00000_01
     bin = binary("$opc[15:13], $imm[5], $opc[11:10], $rdrs1[2:0], $imm[4:0], $opc[1:0]")
 
 
 class c_sub(InstrCA):
+    subsets = ["ext-zca"]
     opn, opc = "c.sub", 0b100_0_11_000_00_000_01
 
 
 class c_xor(InstrCA):
+    subsets = ["ext-zca"]
     opn, opc = "c.xor", 0b100_0_11_000_01_000_01
 
 
 class c_or(InstrCA):
+    subsets = ["ext-zca"]
     opn, opc = "c.or", 0b100_0_11_000_10_000_01
 
 
 class c_and(InstrCA):
+    subsets = ["ext-zca"]
     opn, opc = "c.and", 0b100_0_11_000_11_000_01
 
 
 class c_subw(InstrCA):
+    subsets = ["rv64", "ext-zca"]
     opn, opc = "c.subw", 0b100_1_11_000_00_000_01
 
 
 class c_addw(InstrCA):
+    subsets = ["rv64", "ext-zca"]
     opn, opc = "c.addw", 0b100_1_11_000_10_000_01
 
 
 class c_j(InstrCJ):
+    subsets = ["ext-zca"]
     opn, opc = "c.j", 0b101_00000000000_01
     prm = parameter("", "imm:ImmS11O1")
     bin = binary("$opc[15:13], $imm[11], $imm[4], $imm[9:8], $imm[10], "
@@ -194,6 +225,7 @@ class c_j(InstrCJ):
 
 
 class c_beqz(InstrCBBranch):
+    subsets = ["ext-zca"]
     opn, opc = "c.beqz", 0b110_000_000_00000_01
     prm = parameter("", "rdrs1:GPRC, imm:ImmS8O1")
     bin = binary("$opc[15:13], $imm[8], $imm[4:3], $rdrs1[2:0], "
@@ -207,6 +239,7 @@ class c_beqz(InstrCBBranch):
 
 
 class c_bnez(InstrCBBranch):
+    subsets = ["ext-zca"]
     opn, opc = "c.bnez", 0b111_000_000_00000_01
     prm = parameter("", "rdrs1:GPRC, imm:ImmS8O1")
     bin = binary("$opc[15:13], $imm[8], $imm[4:3], $rdrs1[2:0], "
@@ -220,15 +253,18 @@ class c_bnez(InstrCBBranch):
 
 
 class c_slli(InstrCI10):
+    subsets = ["ext-zca"]
     opn, opc = "c.slli", 0b000_0_00_000_00000_10
 
 
 class c_slli64(InstrCI10):
+    subsets = ["ext-zca"]
     opn, opc = "c.slli64", 0b000_0_00_000_00000_10
     bin = binary("$opc[15:13], $opc[12], $rdrs1[4:0], $opc[6:2], $opc[1:0]")
 
 
 class c_fldsp(InstrCI10):
+    subsets = ["rv64", "ext-zcd"]
     opn, opc = "c.fldsp", 0b001_0_00_000_00000_10
     prm = parameter("rdrs1:GPR", "imm:ImmS6O3")
     bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:3], $imm[8:6], $opc[1:0]")
@@ -236,6 +272,7 @@ class c_fldsp(InstrCI10):
 
 
 class c_lqsp(InstrCI10):
+    subsets = ["rv128", "ext-zca"]
     opn, opc = "c.lqsp", 0b001_0_00_000_00000_10
     prm = parameter("rdrs1:GPR", "imm:ImmS6O4")
     bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4], $imm[9:6], $opc[1:0]")
@@ -243,6 +280,7 @@ class c_lqsp(InstrCI10):
 
 
 class c_lwsp(InstrCI10):
+    subsets = ["ext-zca"]
     opn, opc = "c.lwsp", 0b010_0_00_000_00000_10
     prm = parameter("rdrs1:GPR", "imm:ImmS6O2")
     bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:2], $imm[7:6], $opc[1:0]")
@@ -250,6 +288,7 @@ class c_lwsp(InstrCI10):
 
 
 class c_flwsp(InstrCI10):
+    subsets = ["rv32", "ext-zcf"]
     opn, opc = "c.flwsp", 0b011_0_00_000_00000_10
     prm = parameter("rdrs1:GPR", "imm:ImmS6O2")
     bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:2], $imm[7:6], $opc[1:0]")
@@ -257,6 +296,7 @@ class c_flwsp(InstrCI10):
 
 
 class c_ldsp(InstrCI10):
+    subsets = ["rv64", "ext-zca"]
     opn, opc = "c.ldsp", 0b011_0_00_000_00000_10
     prm = parameter("rdrs1:GPR", "imm:ImmS6O3")
     bin = binary("$opc[15:13], $imm[5], $rdrs1[4:0], $imm[4:3], $imm[8:6], $opc[1:0]")
@@ -264,6 +304,7 @@ class c_ldsp(InstrCI10):
 
 
 class c_jr(InstrCRJ):
+    subsets = ["ext-zca"]
     opn, opc = "c.jr", 0b1000_00000_00000_10
     is_indirect = True
 
@@ -281,14 +322,17 @@ class c_jr(InstrCRJ):
 
 
 class c_mv(InstrCR):
+    subsets = ["ext-zca"]
     opn, opc = "c.mv", 0b1000_00000_00000_10
 
 
 class c_ebreak(InstrCREbreak):
+    subsets = ["ext-zca"]
     opn, opc = "c.ebreak", 0b1001_00000_00000_10
 
 
 class c_jalr(InstrCRJ):
+    subsets = ["ext-zca"]
     opn, opc = "c.jalr", 0b1001_00000_00000_10
     # is_call = True
     is_indirect = True
@@ -300,11 +344,13 @@ class c_jalr(InstrCRJ):
 
 
 class c_add(InstrCR):
+    subsets = ["ext-zca"]
     opn, opc = "c.add", 0b1001_00000_00000_10
     bin = binary("$opc[15:12], $rdrs1[4:0], $rs2[4:0], $opc[1:0]")
 
 
 class c_fsdsp(InstrCSS):
+    subsets = ["rv64", "ext-zcd"]
     opn, opc = "c.fsdsp", 0b101_000000_00000_10
     prm = parameter("", "rs2:GPR, imm:ImmS6O3")
     bin = binary("$opc[15:13], $imm[5:3], $imm[8:6], $rs2[4:0], $opc[1:0]")
@@ -312,6 +358,7 @@ class c_fsdsp(InstrCSS):
 
 
 class c_sqsp(InstrCSS):
+    subsets = ["rv128", "ext-zca"]
     opn, opc = "c.spsp", 0b101_000000_00000_10
     prm = parameter("", "rs2:GPR, imm:ImmS6O4")
     bin = binary("$opc[15:13], $imm[5:4], $imm[9:6], $rs2[4:0], $opc[1:0]")
@@ -319,6 +366,7 @@ class c_sqsp(InstrCSS):
 
 
 class c_swsp(InstrCSS):
+    subsets = ["ext-zca"]
     opn, opc = "c.swsp", 0b110_000000_00000_10
     prm = parameter("", "rs2:GPR, imm:ImmS6O2")
     bin = binary("$opc[15:13], $imm[5:2], $imm[7:6], $rs2[4:0], $opc[1:0]")
@@ -326,6 +374,7 @@ class c_swsp(InstrCSS):
 
 
 class c_fswsp(InstrCSS):
+    subsets = ["rv32", "ext-zcf"]
     opn, opc = "c.fswsp", 0b111_000000_00000_10
     prm = parameter("", "rs2:GPR, imm:ImmS6O2")
     bin = binary("$opc[15:13], $imm[5:2], $imm[7:6], $rs2[4:0], $opc[1:0]")
@@ -333,6 +382,7 @@ class c_fswsp(InstrCSS):
 
 
 class c_sdsp(InstrCSS):
+    subsets = ["rv64", "ext-zca"]
     opn, opc = "c.sdsp", 0b111_000000_00000_10
     prm = parameter("", "rs2:GPR, imm:ImmS6O3")
     bin = binary("$opc[15:13], $imm[5:3], $imm[8:6], $rs2[4:0], $opc[1:0]")
@@ -340,98 +390,118 @@ class c_sdsp(InstrCSS):
 
 
 class c_lbu(InstrCLB):
+    subsets = ["ext-zcb"]
     opn, opc = "c.lbu", 0b100_000_000_00_000_00
     bin = binary("$opc[15:10], $rs1[2:0], $imm[0], $imm[1], $rd[2:0], $opc[1:0]")
     is_load = True
 
 
 class c_lhu(InstrCLH):
+    subsets = ["ext-zcb"]
     opn, opc = "c.lhu", 0b100_001_000_0_0_000_00
     bin = binary("$opc[15:10], $rs1[2:0], $opc[6], $imm[0], $rd[2:0], $opc[1:0]")
     is_load = True
 
 
 class c_lh(InstrCLH):
+    subsets = ["ext-zcb"]
     opn, opc = "c.lh", 0b100_001_000_1_0_000_00
     bin = binary("$opc[15:10], $rs1[2:0], $opc[6], $imm[0], $rd[2:0], $opc[1:0]")
     is_load = True
 
 
 class c_sb(InstrCSB):
+    subsets = ["ext-zcb"]
     opn, opc = "c.sb", 0b100_010_000_00_000_00
     bin = binary("$opc[15:10], $rs1[2:0], $imm[0], $imm[1], $rs2[2:0], $opc[1:0]")
     is_store = True
 
 
 class c_sh(InstrCSH):
+    subsets = ["ext-zcb"]
     opn, opc = "c.sh", 0b100_011_000_00_000_00
     bin = binary("$opc[15:10], $rs1[2:0], $opc[6], $imm[0], $rs2[2:0], $opc[1:0]")
     is_store = True
 
 
 class c_zext_b(InstrCU):
+    subsets = ["ext-zcb"]
     opn, opc = "c.zext.b", 0b100_111_000_11_000_01
 
 
 class c_sext_b(InstrCU):
+    subsets = ["ext-zcb"]
     opn, opc = "c.sext.b", 0b100_111_000_11_001_01
 
 
 class c_zext_h(InstrCU):
+    subsets = ["ext-zcb"]
     opn, opc = "c.zext.h", 0b100_111_000_11_010_01
 
 
 class c_sext_h(InstrCU):
+    subsets = ["ext-zcb"]
     opn, opc = "c.sext.h", 0b100_111_000_11_011_01
 
 
 class c_zext_w(InstrCU):
+    subsets = ["ext-zcb"]
     opn, opc = "c.zext.w", 0b100_111_000_11_100_01
 
 
 class c_not(InstrCU):
+    subsets = ["ext-zcb"]
     opn, opc = "c.not", 0b100_111_000_11_101_01
 
 
 class c_mul(InstrCA):
+    subsets = ["ext-zcb"]
     opn, opc = "c.mul", 0b100_111_000_10_000_01
 
 
 class cm_push(InstrCMPP):
+    subsets = ["ext-zcmp"]
     opn, opc = "cm.push", 0b101_11000_0000_00_10
     is_push = True
 
 
 class cm_pop(InstrCMPP):
+    subsets = ["ext-zcmp"]
     opn, opc = "cm.pop", 0b101_11010_0000_00_10
     is_pop = True
 
 
 class cm_popretz(InstrCMPP):
+    subsets = ["ext-zcmp"]
     opn, opc = "cm.popretz", 0b101_11100_0000_00_10
     is_pop = True
 
 
 class cm_popret(InstrCMPP):
+    subsets = ["ext-zcmp"]
     opn, opc = "cm.popret", 0b101_11110_0000_00_10
     is_pop = True
 
 
 class cm_mvsa01(InstrCMMV):
+    subsets = ["ext-zcmp"]
     opn, opc = "cm.mvsa01", 0b101_011_000_01_000_10
 
 
 class cm_mva01s(InstrCMMV):
+    subsets = ["ext-zcmp"]
     opn, opc = "cm.mva01s", 0b101_011_000_11_000_10
 
 
 class cm_jt(InstrCMJT):
+    subsets = ["ext-zcmt"]
     opn, opc = "cm.jt", 0b101_000_000_00000_10
     bin = binary("$opc[15:10], $opc[9:7], $imm[4:0], $opc[1:0]")
     # is_jump = True
 
 
 class cm_jalt(InstrCMJT):
+    subsets = ["ext-zcmt"]
     opn, opc = "cm.jalt", 0b101_000_00000000_10
     # is_jump = True
 

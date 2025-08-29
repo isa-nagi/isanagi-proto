@@ -9,6 +9,7 @@ from .instructionType import (
 
 
 class csrrw(InstrCSRR):
+    subsets = ["ext-zicsr"]
     opn, opc = "csrrw", 0b000000000000_00000_001_00000_1110011
 
     def semantic(self, ctx, ins):
@@ -18,22 +19,27 @@ class csrrw(InstrCSRR):
 
 
 class csrrs(InstrCSRR):
+    subsets = ["ext-zicsr"]
     opn, opc = "csrrs", 0b000000000000_00000_010_00000_1110011
 
 
 class csrrc(InstrCSRR):
+    subsets = ["ext-zicsr"]
     opn, opc = "csrrc", 0b000000000000_00000_011_00000_1110011
 
 
 class csrrwi(InstrCSRI):
+    subsets = ["ext-zicsr"]
     opn, opc = "csrrwi", 0b000000000000_00000_101_00000_1110011
 
 
 class csrrsi(InstrCSRI):
+    subsets = ["ext-zicsr"]
     opn, opc = "csrrsi", 0b000000000000_00000_110_00000_1110011
 
 
 class csrrci(InstrCSRI):
+    subsets = ["ext-zicsr"]
     opn, opc = "csrrci", 0b000000000000_00000_111_00000_1110011
 
 

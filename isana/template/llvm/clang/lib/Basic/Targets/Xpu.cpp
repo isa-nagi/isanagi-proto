@@ -17,7 +17,9 @@ static constexpr Builtin::Info BuiltinInfo[] = {
 };
 
 static constexpr llvm::StringLiteral ValidCPUNames[] = {
-    {"{{ xpu }}32le"}
+    {%- for processor in processors %}
+    {"{{ processor.name }}"}{% if not loop.last %},{% endif %}
+    {%- endfor %}
 };
 
 bool {{ Xpu }}TargetInfo::setABI(const std::string &Name) {

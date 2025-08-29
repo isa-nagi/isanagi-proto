@@ -415,6 +415,7 @@ class ebreak(InstrO):
 
 
 class lwu(InstrILoad):
+    subsets = ["rv64"]
     opn, opc = "lwu", 0b000000000000_00000_110_00000_0000011
 
     def semantic(self, ctx, ins):
@@ -431,6 +432,7 @@ class lwu(InstrILoad):
 
 
 class ld(InstrILoad):
+    subsets = ["rv64"]
     opn, opc = "ld", 0b000000000000_00000_011_00000_0000011
 
     def semantic(self, ctx, ins):
@@ -447,6 +449,7 @@ class ld(InstrILoad):
 
 
 class sd(InstrS):
+    subsets = ["rv64"]
     opn, opc = "sd", 0b0000000_00000_00000_011_00000_0100011
 
     def semantic(self, ctx, ins):
@@ -463,6 +466,7 @@ class sd(InstrS):
 
 
 class slli64(InstrIShift64):
+    subsets = ["rv64"]
     opn, opc = "slli", 0b0000000_00000_00000_001_00000_0010011
 
     def semantic(self, ctx, ins):
@@ -470,6 +474,7 @@ class slli64(InstrIShift64):
 
 
 class srli64(InstrIShift64):
+    subsets = ["rv64"]
     opn, opc = "srli", 0b0000000_00000_00000_101_00000_0010011
 
     def semantic(self, ctx, ins):
@@ -477,6 +482,7 @@ class srli64(InstrIShift64):
 
 
 class srai64(InstrIShift64):
+    subsets = ["rv64"]
     opn, opc = "srai", 0b0100000_00000_00000_101_00000_0010011
 
     def semantic(self, ctx, ins):
@@ -484,6 +490,7 @@ class srai64(InstrIShift64):
 
 
 class addiw(InstrIAlu):
+    subsets = ["rv64"]
     opn, opc = "addiw", 0b000000000000_00000_000_00000_0011011
 
     def semantic(self, ctx, ins):
@@ -491,6 +498,7 @@ class addiw(InstrIAlu):
 
 
 class slliw(InstrIShift):
+    subsets = ["rv64"]
     opn, opc = "slliw", 0b0000000_00000_00000_001_00000_0011011
 
     def semantic(self, ctx, ins):
@@ -498,6 +506,7 @@ class slliw(InstrIShift):
 
 
 class srliw(InstrIShift):
+    subsets = ["rv64"]
     opn, opc = "srliw", 0b0000000_00000_00000_101_00000_0011011
 
     def semantic(self, ctx, ins):
@@ -505,6 +514,7 @@ class srliw(InstrIShift):
 
 
 class sraiw(InstrIShift):
+    subsets = ["rv64"]
     opn, opc = "sraiw", 0b0100000_00000_00000_101_00000_0011011
 
     def semantic(self, ctx, ins):
@@ -512,6 +522,7 @@ class sraiw(InstrIShift):
 
 
 class addw(InstrR):
+    subsets = ["rv64"]
     opn, opc = "addw", 0b0000000_00000_00000_000_00000_0111011
 
     def semantic(self, ctx, ins):
@@ -519,6 +530,7 @@ class addw(InstrR):
 
 
 class subw(InstrR):
+    subsets = ["rv64"]
     opn, opc = "subw", 0b0100000_00000_00000_000_00000_0111011
 
     def semantic(self, ctx, ins):
@@ -526,6 +538,7 @@ class subw(InstrR):
 
 
 class sllw(InstrR):
+    subsets = ["rv64"]
     opn, opc = "sllw", 0b0000000_00000_00000_001_00000_0111011
 
     def semantic(self, ctx, ins):
@@ -533,6 +546,7 @@ class sllw(InstrR):
 
 
 class srlw(InstrR):
+    subsets = ["rv64"]
     opn, opc = "srlw", 0b0000000_00000_00000_101_00000_0111011
 
     def semantic(self, ctx, ins):
@@ -540,6 +554,7 @@ class srlw(InstrR):
 
 
 class sraw(InstrR):
+    subsets = ["rv64"]
     opn, opc = "sraw", 0b0100000_00000_00000_101_00000_0111011
 
     def semantic(self, ctx, ins):

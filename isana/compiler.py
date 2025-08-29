@@ -29,6 +29,24 @@ class KwargsClass():
             setattr(self, k, v)
 
 
+class FeatureDef(KwargsClass):
+    keys = (
+        'varname',
+        'name',
+        'fieldname',
+        'value',
+        'desc',
+    )
+
+
+class ProcessorModelDef(KwargsClass):
+    keys = (
+        'varname',
+        'name',
+        'features',
+    )
+
+
 class RegisterBase(KwargsClass):
     keys = (
         'name',
@@ -99,6 +117,7 @@ class InstrDefs(KwargsClass):
         'bit_defs',
         'bit_insts',
         'attrs',
+        'predicates',
     )
 
 
@@ -2126,6 +2145,29 @@ class LLVMCompiler():
                 if brcls not in (o.varname for o in br_imm_operand_clss):
                     br_imm_operand_clss.append(operand_cls)
 
+        # features
+        features = []
+        for subset in self.isa.subsets:
+            feature = FeatureDef()
+            feature.varname = re.sub(r"\W", r"_", subset.name)
+            feature.name = subset.name
+            feature.fieldname = "Has_" + feature.varname
+            feature.value = "true"
+            feature.desc = f"subset of '{feature.name}'"
+            features.append(feature)
+
+        # processors
+        processors = []
+        for processor in self.processors:
+            pm = ProcessorModelDef()
+            pm.name = processor.name
+            pm.varname = "ProcModel_" + re.sub(r"\W", r"_", processor.name)
+            pm.features = []
+            for subset in processor.subsets:
+                feature = next(filter(lambda f: f.name == subset, features), None)
+                pm.features.append(feature)
+            processors.append(pm)
+
         instr_defs = []
         for instr in self.isa.instructions:
             pc_relative = may_change_pc_relative(instr)
@@ -2261,6 +2303,14 @@ class LLVMCompiler():
             attrs.sort()
             attrs = [f"  let {x} = true;"for x in attrs]
             instr_def.attrs = "\n".join(attrs)
+
+            predicates = []
+            for subset in instr.subsets:
+                varname = re.sub(r"\W", r"_", subset)
+                fieldname = "Has_" + varname
+                predicates
+                predicates.append(fieldname)
+            instr_def.predicates = "  let Predicates = [{}];".format(', '.join(predicates))
 
             instr_defs.append(instr_def)
 
@@ -2464,6 +2514,9 @@ class LLVMCompiler():
         long_br_codes = codes
 
         kwargs = {
+            "features": features,
+            "processors": processors,
+
             "asm_operand_clss": asm_operand_clss,
             "operand_clss": operand_clss,
             "operand_types": operand_types,
@@ -2549,6 +2602,7 @@ class LLVMCompiler():
             "clang/lib/Basic/Targets.cpp",
             "clang/lib/Basic/CMakeLists.txt",
             "clang/lib/Driver/ToolChains/BareMetal.cpp",
+            "clang/lib/Driver/ToolChains/CommonArgs.cpp",
         )
         for fpath in fpaths:
             self._read_template_and_write(fpath)
@@ -2577,6 +2631,7 @@ class LLVMCompiler():
             "llvm/lib/Target/{Xpu}/{Xpu}.td",
             "llvm/lib/Target/{Xpu}/{Xpu}AsmPrinter.cpp",
             "llvm/lib/Target/{Xpu}/{Xpu}CallingConv.td",
+            "llvm/lib/Target/{Xpu}/{Xpu}Features.td",
             "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.td",
             "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.cpp",
             "llvm/lib/Target/{Xpu}/{Xpu}RegisterInfo.h",
